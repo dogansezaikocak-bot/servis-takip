@@ -1040,7 +1040,7 @@ body.nav-open .nav-item b {
   }
 
   body.source-portal .rail-nav {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   body.nav-open .app-shell {
@@ -1133,16 +1133,35 @@ body.nav-open .nav-item b {
   .dashboard-date-filters {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 5px;
+    gap: 6px;
     margin-top: 8px;
+  }
+
+  .dashboard-date-filters label {
+    min-width: 0;
+    padding: 4px 6px 6px;
+    border: 1px solid rgba(255,255,255,.45);
+    border-radius: 8px;
+    background: rgba(255,255,255,.96);
+    color: var(--blue-dark);
+    display: grid;
+    gap: 2px;
+  }
+
+  .dashboard-date-filters label span {
+    font-size: 10px;
+    line-height: 1;
+    font-weight: 700;
   }
 
   .dashboard-date-filters input {
     width: 100%;
     min-width: 0;
-    min-height: 34px;
-    height: 34px;
-    padding: 4px 6px;
+    min-height: 24px;
+    height: 24px;
+    padding: 0;
+    border: 0;
+    background: transparent;
     font-size: 12px;
   }
 
@@ -1300,8 +1319,8 @@ body.nav-open .nav-item b {
   }
 
   .dashboard-date-filters input {
-    min-height: 34px;
-    height: 34px;
+    min-height: 24px;
+    height: 24px;
   }
 
   .compact-row {

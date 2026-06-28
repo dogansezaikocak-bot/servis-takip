@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Ekzen Servis Takip</title>
-  <link rel="stylesheet" href="./styles.css?v=20260629-mobile-home">
+  <link rel="stylesheet" href="./styles.css?v=20260629-mobile-home-tabs">
 </head>
 <body>
   <div class="app-shell">
@@ -38,8 +38,8 @@
             <h2 id="dashboardTitle">Ekzen Teknik</h2>
             <p id="dashboardOwnerLine">Doğan Sezai Koçak · Patron</p>
             <div class="dashboard-date-filters" aria-label="Ana sayfa tarih aralığı">
-              <input id="dashboardStartDate" type="date" aria-label="Ana sayfa başlangıç tarihi">
-              <input id="dashboardEndDate" type="date" aria-label="Ana sayfa bitiş tarihi">
+              <label><span>Başlangıç</span><input id="dashboardStartDate" type="date" aria-label="Ana sayfa başlangıç tarihi"></label>
+              <label><span>Bitiş</span><input id="dashboardEndDate" type="date" aria-label="Ana sayfa bitiş tarihi"></label>
             </div>
           </div>
           <div class="metric-grid" id="sourceMetrics"></div>
@@ -308,6 +308,6 @@
 
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
-  <script src="./app.js?v=20260629-mobile-home"></script>
+  <script src="./app.js?v=20260629-mobile-home-tabs"></script>
 </body>
 </html>

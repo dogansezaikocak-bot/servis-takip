@@ -495,7 +495,7 @@ function fillSelects() {
 function applySourcePortalMode() {
   if (!isSourcePortal()) return;
   document.body.classList.add("source-portal");
-  document.querySelectorAll('[data-view="sources"], [data-view="settings"]').forEach((item) => {
+  document.querySelectorAll('[data-view="services"], [data-view="customers"], [data-view="sources"], [data-view="settings"]').forEach((item) => {
     item.hidden = true;
   });
   lockSelectToSource(topSourceFilter);
@@ -538,7 +538,7 @@ function setDefaultDates() {
 }
 
 function switchView(view) {
-  if (isSourcePortal() && ["sources", "settings"].includes(view)) view = "dashboard";
+  if (isSourcePortal() && !["dashboard", "cash"].includes(view)) view = "dashboard";
   currentView = view;
   Object.entries(views).forEach(([key, element]) => element.classList.toggle("is-visible", key === view));
   document.querySelectorAll(".nav-item").forEach((item) => item.classList.toggle("is-active", item.dataset.view === view));
