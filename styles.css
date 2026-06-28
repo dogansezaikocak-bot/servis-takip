@@ -1039,6 +1039,10 @@ body.nav-open .nav-item b {
     gap: 4px;
   }
 
+  body.source-portal .rail-nav {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
   body.nav-open .app-shell {
     display: block;
   }

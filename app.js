@@ -38,6 +38,7 @@ const today = new Date();
 const isoToday = toIsoDate(today);
 const tomorrow = new Date(today);
 tomorrow.setDate(today.getDate() + 1);
+const sourcePortalParam = new URLSearchParams(window.location.search).get("kaynak")?.trim() || "";
 
 let state = migrateState(loadState());
 let currentView = "dashboard";
@@ -87,6 +88,7 @@ init();
 
 function init() {
   fillSelects();
+  applySourcePortalMode();
   bindEvents();
   setDefaultDates();
   saveLocalState();
@@ -366,6 +368,7 @@ function bindEvents() {
     if (jump) switchView(jump);
     if (serviceRow && !event.target.closest("button") && !event.target.matches("input")) openDetail(serviceRow.dataset.serviceId);
     if (!action) return;
+    if (isSourcePortal() && ["add-source", "edit-source", "delete-source", "add-setting-item", "edit-setting-item", "delete-setting-item", "move-setting-item", "export-backup", "choose-backup"].includes(action)) return;
 
     if (action === "toggle-nav") document.body.classList.toggle("nav-open");
     if (action === "open-service-modal") openServiceForm();
@@ -486,6 +489,32 @@ function fillSelects() {
   fillSelect(statusForm.elements.status, settingsList("statuses"));
 }
 
+function applySourcePortalMode() {
+  if (!isSourcePortal()) return;
+  document.body.classList.add("source-portal");
+  document.querySelectorAll('[data-view="sources"], [data-view="settings"]').forEach((item) => {
+    item.hidden = true;
+  });
+  lockSelectToSource(topSourceFilter);
+  lockSelectToSource(cashSourceFilter);
+  lockSelectToSource(serviceForm.elements.source, false);
+  lockSelectToSource(cashForm.elements.source, false);
+  topSourceFilter.hidden = true;
+  cashSourceFilter.hidden = true;
+  serviceForm.elements.source.closest("label").hidden = true;
+  cashForm.elements.source.closest("label").hidden = true;
+}
+
+function lockSelectToSource(select, disabled = true) {
+  if (!select || !isSourcePortal()) return;
+  const source = portalSourceName();
+  if (![...select.options].some((option) => option.value === source)) {
+    select.add(new Option(source, source));
+  }
+  select.value = source;
+  select.disabled = disabled;
+}
+
 function fillSelect(select, options) {
   if (!select) return;
   const previous = select.value;
@@ -505,6 +534,7 @@ function setDefaultDates() {
 }
 
 function switchView(view) {
+  if (isSourcePortal() && ["sources", "settings"].includes(view)) view = "dashboard";
   currentView = view;
   Object.entries(views).forEach(([key, element]) => element.classList.toggle("is-visible", key === view));
   document.querySelectorAll(".nav-item").forEach((item) => item.classList.toggle("is-active", item.dataset.view === view));
@@ -521,8 +551,10 @@ function switchView(view) {
 }
 
 function render() {
-  document.querySelector("#companyTitle").textContent = state.company.companyName || "Servis Takip";
+  document.title = `${portalTitle()} - Servis Takip`;
+  document.querySelector("#companyTitle").textContent = portalTitle();
   fillSelects();
+  applySourcePortalMode();
   renderDashboard();
   renderServices();
   renderCustomers();
@@ -556,7 +588,7 @@ function renderDashboard() {
 }
 
 function renderSourceMetrics(services, cashItems, cashBalanceItems) {
-  const sourceList = settingsList("sources");
+  const sourceList = isSourcePortal() ? [portalSourceName()] : settingsList("sources");
   const sourceCards = sourceList.map((source) => {
     const sourceCashItems = cashItems.filter((item) => cashItemSource(item) === source);
     const remainingTotal = cashRemainingBalance(sourceCashItems);
@@ -628,7 +660,8 @@ function filteredServices() {
     ].join(" "));
     const sourceFilter = topSourceFilter.value;
     const statusFilter = topStatusFilter.value;
-    return (!query || query.split(" ").every((word) => queryText.includes(word)))
+    return matchesPortalSource(service.source)
+      && (!query || query.split(" ").every((word) => queryText.includes(word)))
       && (!statusFilter || service.status === statusFilter)
       && (!sourceFilter || service.source === sourceFilter)
       && (!activeDashboardSource || (service.source === activeDashboardSource && isOpenDashboardSourceStatus(service.status)))
@@ -640,17 +673,17 @@ function applyDashboardStatFilter(stat) {
   activeDashboardStat = stat || "";
   activeDashboardSource = "";
   filterForm.reset();
-  topSourceFilter.value = "";
+  topSourceFilter.value = isSourcePortal() ? portalSourceName() : "";
   topStatusFilter.value = "";
   switchView("services");
   renderServices();
 }
 
 function applyDashboardSourceFilter(source) {
-  activeDashboardSource = source || "";
+  activeDashboardSource = isSourcePortal() ? portalSourceName() : (source || "");
   activeDashboardStat = "";
   filterForm.reset();
-  topSourceFilter.value = "";
+  topSourceFilter.value = isSourcePortal() ? portalSourceName() : "";
   topStatusFilter.value = "";
   switchView("services");
   renderServices();
@@ -723,7 +756,7 @@ function renderCustomers() {
 
 function uniqueCustomers() {
   const map = new Map();
-  state.services.forEach((service) => {
+  state.services.filter((service) => matchesPortalSource(service.source)).forEach((service) => {
     const key = `${norm(service.customerName)}-${norm(service.phone)}`;
     if (!map.has(key)) map.set(key, { ...service, latestServiceId: service.id });
   });
@@ -874,7 +907,7 @@ function cashRow(item) {
 }
 
 function filteredCash() {
-  const source = cashSourceFilter.value;
+  const source = isSourcePortal() ? portalSourceName() : cashSourceFilter.value;
   const start = cashStartDate.value;
   const end = cashEndDate.value;
   return state.cash.filter((item) => {
@@ -901,13 +934,13 @@ function cashRemainingBalance(items = state.cash) {
 function filteredDashboardServices() {
   const start = dashboardStartDate.value;
   const end = dashboardEndDate.value;
-  return state.services.filter((service) => dateInRange(serviceMainDate(service), start, end));
+  return state.services.filter((service) => matchesPortalSource(service.source) && dateInRange(serviceMainDate(service), start, end));
 }
 
 function filteredDashboardCash() {
   const start = dashboardStartDate.value;
   const end = dashboardEndDate.value;
-  return state.cash.filter((item) => dateInRange(item.date || "", start, end));
+  return state.cash.filter((item) => matchesPortalSource(cashItemSource(item)) && dateInRange(item.date || "", start, end));
 }
 
 function filteredDashboardCashForBalance() {
@@ -915,7 +948,7 @@ function filteredDashboardCashForBalance() {
   const end = dashboardEndDate.value;
   if (start || end) return filteredDashboardCash();
   const week = currentWeekRange();
-  return state.cash.filter((item) => dateInRange(item.date || "", week.start, week.end));
+  return state.cash.filter((item) => matchesPortalSource(cashItemSource(item)) && dateInRange(item.date || "", week.start, week.end));
 }
 
 function currentWeekRange() {
@@ -993,13 +1026,14 @@ function openServiceForm(service) {
   serviceForm.reset();
   serviceForm.elements.id.value = "";
   serviceForm.elements.status.value = "Yeni Kayıt";
-  serviceForm.elements.source.value = "Kendi İşim";
+  serviceForm.elements.source.value = isSourcePortal() ? portalSourceName() : "Kendi İşim";
   serviceForm.elements.availableDate.value = isoToday;
   serviceForm.elements.warrantyEnd.value = addYear(isoToday);
   document.querySelector("#serviceDialogTitle").textContent = "Yeni Servis";
   serviceDialog.querySelector("[data-action='delete-service']").style.visibility = "hidden";
 
   if (service) {
+    if (!matchesPortalSource(service.source)) return;
     Object.entries(service).forEach(([key, value]) => {
       if (serviceForm.elements[key]) serviceForm.elements[key].value = value || "";
     });
@@ -1011,14 +1045,14 @@ function openServiceForm(service) {
 
 function openRelatedServiceForm(serviceId) {
   const original = state.services.find((service) => service.id === serviceId);
-  if (!original) return;
+  if (!original || !matchesPortalSource(original.source)) return;
   detailDialog.close();
   openServiceForm();
   serviceForm.elements.customerName.value = original.customerName || "";
   serviceForm.elements.phone.value = original.phone || "";
   serviceForm.elements.address.value = original.address || "";
   serviceForm.elements.availableTime.value = original.availableTime || "";
-  serviceForm.elements.source.value = original.source || serviceForm.elements.source.value;
+  serviceForm.elements.source.value = isSourcePortal() ? portalSourceName() : (original.source || serviceForm.elements.source.value);
   serviceForm.elements.brand.value = "";
   serviceForm.elements.device.value = "";
   serviceForm.elements.model.value = "";
@@ -1031,6 +1065,8 @@ function saveService(formData) {
   const data = Object.fromEntries(formData);
   const isUpdate = Boolean(data.id);
   const previous = state.services.find((service) => service.id === data.id);
+  if (isSourcePortal() && previous && !matchesPortalSource(previous.source)) return;
+  if (isSourcePortal()) data.source = portalSourceName();
   const status = isUpdate ? data.status : "Yeni Kayıt";
   const service = {
     ...(previous || {}),
@@ -1062,6 +1098,8 @@ function saveService(formData) {
 function deleteCurrentService() {
   const id = serviceForm.elements.id.value;
   if (!id) return;
+  const service = state.services.find((item) => item.id === id);
+  if (!service || !matchesPortalSource(service.source)) return;
   if (!confirm(`${id} numaralı servis silinsin mi?`)) return;
   state.services = state.services.filter((service) => service.id !== id);
   state.cash = state.cash.filter((item) => item.serviceId !== id);
@@ -1072,6 +1110,8 @@ function deleteCurrentService() {
 }
 
 function openDetail(id) {
+  const service = state.services.find((item) => item.id === id);
+  if (!service || !matchesPortalSource(service.source)) return;
   activeDetailId = id;
   renderDetail(id);
   detailDialog.showModal();
@@ -1079,7 +1119,7 @@ function openDetail(id) {
 
 function renderDetail(id) {
   const service = state.services.find((item) => item.id === id);
-  if (!service) return;
+  if (!service || !matchesPortalSource(service.source)) return;
   document.querySelector("#detailTitle").textContent = `Servis Detay (${service.id})`;
   const linkedCash = state.cash.filter((item) => item.serviceId === service.id);
   detailBody.innerHTML = `
@@ -1195,7 +1235,7 @@ function openStatusForm(serviceId) {
 function saveStatus(formData) {
   const data = Object.fromEntries(formData);
   const service = state.services.find((item) => item.id === data.serviceId);
-  if (!service) return;
+  if (!service || !matchesPortalSource(service.source)) return;
   service.status = data.status;
   service.availableDate = data.date || service.availableDate;
   service.statusHistory.unshift({
@@ -1216,7 +1256,7 @@ function openCashForm(options = {}) {
   cashForm.elements.date.value = isoToday;
   cashForm.elements.type.value = "income";
   cashForm.elements.serviceId.value = options.serviceId || "";
-  cashForm.elements.source.value = serviceSource(options.serviceId) || cashSourceFilter.value || "";
+  cashForm.elements.source.value = serviceSource(options.serviceId) || (isSourcePortal() ? portalSourceName() : cashSourceFilter.value) || "";
   const deleteButton = cashDialog.querySelector("[data-action='delete-cash']");
   delete deleteButton.dataset.cashId;
   deleteButton.style.visibility = "hidden";
@@ -1224,7 +1264,7 @@ function openCashForm(options = {}) {
 
   if (options.id) {
     const item = state.cash.find((cashItem) => cashItem.id === options.id);
-    if (!item) return;
+    if (!item || !matchesPortalSource(cashItemSource(item))) return;
     Object.entries(item).forEach(([key, value]) => {
       if (key === "commission50") return;
       if (cashForm.elements[key]) cashForm.elements[key].value = value || "";
@@ -1242,6 +1282,8 @@ function saveCash(formData) {
   const data = Object.fromEntries(formData);
   const previous = state.cash.find((item) => item.id === data.id);
   const serviceId = data.serviceId.trim();
+  if (isSourcePortal() && previous && !matchesPortalSource(cashItemSource(previous))) return;
+  if (isSourcePortal() && serviceId && !matchesPortalSource(serviceSource(serviceId))) return;
   const materialCost = Number(data.materialCost) || 0;
   const cashItem = {
     ...(previous || {}),
@@ -1252,7 +1294,7 @@ function saveCash(formData) {
     amount: Number(data.amount) || 0,
     materialCost,
     commission50: Boolean(data.commission50),
-    source: data.source || serviceSource(serviceId) || "",
+    source: isSourcePortal() ? portalSourceName() : (data.source || serviceSource(serviceId) || ""),
     serviceId,
   };
   if (data.id) state.cash = state.cash.map((item) => item.id === data.id ? cashItem : item);
@@ -1265,7 +1307,7 @@ function saveCash(formData) {
 
 function deleteCash(id) {
   const item = state.cash.find((cashItem) => cashItem.id === id);
-  if (!item || !confirm(`${visibleCashTitle(item) || "Para hareketi"} silinsin mi?`)) return;
+  if (!item || !matchesPortalSource(cashItemSource(item)) || !confirm(`${visibleCashTitle(item) || "Para hareketi"} silinsin mi?`)) return;
   state.cash = state.cash.filter((cashItem) => cashItem.id !== id && cashItem.parentCashId !== id);
   saveState();
   if (cashDialog.open) cashDialog.close();
@@ -1274,7 +1316,7 @@ function deleteCash(id) {
 
 function openNoteForm(serviceId, noteId = "") {
   const service = state.services.find((item) => item.id === serviceId);
-  if (!service) return;
+  if (!service || !matchesPortalSource(service.source)) return;
   const note = service.notes.find((item) => item.id === noteId);
   noteForm.reset();
   noteForm.elements.serviceId.value = serviceId;
@@ -1288,7 +1330,7 @@ function openNoteForm(serviceId, noteId = "") {
 function saveNote(formData) {
   const data = Object.fromEntries(formData);
   const service = state.services.find((item) => item.id === data.serviceId);
-  if (!service) return;
+  if (!service || !matchesPortalSource(service.source)) return;
   if (data.noteId) {
     service.notes = service.notes.map((note) => note.id === data.noteId ? { ...note, text: data.text, updatedAt: new Date().toISOString() } : note);
   } else {
@@ -1303,7 +1345,7 @@ function deleteNote(serviceId, noteId) {
   serviceId = serviceId || noteForm.elements.serviceId.value;
   noteId = noteId || noteForm.elements.noteId.value;
   const service = state.services.find((item) => item.id === serviceId);
-  if (!service || !noteId || !confirm("Not silinsin mi?")) return;
+  if (!service || !matchesPortalSource(service.source) || !noteId || !confirm("Not silinsin mi?")) return;
   service.notes = service.notes.filter((note) => note.id !== noteId);
   saveState();
   if (noteDialog.open) noteDialog.close();
@@ -1311,6 +1353,8 @@ function deleteNote(serviceId, noteId) {
 }
 
 function openPhotoForm(serviceId) {
+  const service = state.services.find((item) => item.id === serviceId);
+  if (!service || !matchesPortalSource(service.source)) return;
   photoForm.reset();
   photoForm.elements.serviceId.value = serviceId;
   photoDialog.showModal();
@@ -1318,7 +1362,7 @@ function openPhotoForm(serviceId) {
 
 async function savePhoto() {
   const service = state.services.find((item) => item.id === photoForm.elements.serviceId.value);
-  if (!service) return;
+  if (!service || !matchesPortalSource(service.source)) return;
   const file = photoForm.elements.photo.files[0] || photoForm.elements.camera.files[0];
   if (!file) {
     alert("Fotoğraf seçmeniz gerekiyor.");
@@ -1338,6 +1382,7 @@ async function savePhoto() {
 
 function editPhoto(serviceId, photoId) {
   const service = state.services.find((item) => item.id === serviceId);
+  if (!service || !matchesPortalSource(service.source)) return;
   const photo = service?.photos.find((item) => item.id === photoId);
   if (!photo) return;
   const caption = prompt("Fotoğraf açıklaması", photo.caption || "");
@@ -1349,7 +1394,7 @@ function editPhoto(serviceId, photoId) {
 
 function deletePhoto(serviceId, photoId) {
   const service = state.services.find((item) => item.id === serviceId);
-  if (!service || !confirm("Fotoğraf silinsin mi?")) return;
+  if (!service || !matchesPortalSource(service.source) || !confirm("Fotoğraf silinsin mi?")) return;
   service.photos = service.photos.filter((photo) => photo.id !== photoId);
   saveState();
   render();
@@ -1681,6 +1726,23 @@ function serviceSource(serviceId) {
 
 function cashItemSource(item) {
   return serviceSource(item.serviceId) || item.source || "";
+}
+
+function isSourcePortal() {
+  return Boolean(sourcePortalParam);
+}
+
+function portalSourceName() {
+  if (!sourcePortalParam) return "";
+  return settingsList("sources").find((source) => norm(source) === norm(sourcePortalParam)) || sourcePortalParam;
+}
+
+function matchesPortalSource(source) {
+  return !isSourcePortal() || norm(source) === norm(portalSourceName());
+}
+
+function portalTitle() {
+  return isSourcePortal() ? portalSourceName() : (state.company.companyName || "Servis Takip");
 }
 
 function isOwnWorkSource(source) {
