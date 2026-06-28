@@ -535,8 +535,9 @@ function render() {
 function renderDashboard() {
   const services = filteredDashboardServices();
   const cashItems = filteredDashboardCash();
+  const cashBalanceItems = filteredDashboardCashForBalance();
   document.querySelector("#dashboardTitle").textContent = state.company.companyName;
-  renderSourceMetrics(services, cashItems);
+  renderSourceMetrics(services, cashItems, cashBalanceItems);
   renderDashboardCounters(services);
 
   const plans = [...services]
@@ -554,7 +555,7 @@ function renderDashboard() {
   `).join("") : `<p class="empty">Plan bulunamadı.</p>`;
 }
 
-function renderSourceMetrics(services, cashItems) {
+function renderSourceMetrics(services, cashItems, cashBalanceItems) {
   const sourceList = settingsList("sources");
   const sourceCards = sourceList.map((source) => {
     const sourceCashItems = cashItems.filter((item) => cashItemSource(item) === source);
@@ -570,7 +571,7 @@ function renderSourceMetrics(services, cashItems) {
   const cashCard = `
     <article>
       <span>Kasa Durumu</span>
-      <b>${money(customerCashBalance(cashItems))}</b>
+      <b>${money(customerCashBalance(cashBalanceItems))}</b>
       <small>Milat: ${formatDate(isoToday)}</small>
     </article>
   `;
@@ -907,6 +908,23 @@ function filteredDashboardCash() {
   const start = dashboardStartDate.value;
   const end = dashboardEndDate.value;
   return state.cash.filter((item) => dateInRange(item.date || "", start, end));
+}
+
+function filteredDashboardCashForBalance() {
+  const start = dashboardStartDate.value;
+  const end = dashboardEndDate.value;
+  if (start || end) return filteredDashboardCash();
+  const week = currentWeekRange();
+  return state.cash.filter((item) => dateInRange(item.date || "", week.start, week.end));
+}
+
+function currentWeekRange() {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - start.getDay());
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  return { start: toIsoDate(start), end: toIsoDate(end) };
 }
 
 function dateInRange(date, start, end) {
