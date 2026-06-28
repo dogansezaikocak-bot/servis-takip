@@ -368,7 +368,10 @@ function bindEvents() {
     if (jump) switchView(jump);
     if (serviceRow && !event.target.closest("button") && !event.target.matches("input")) openDetail(serviceRow.dataset.serviceId);
     if (!action) return;
-    if (isSourcePortal() && ["add-source", "edit-source", "delete-source", "add-setting-item", "edit-setting-item", "delete-setting-item", "move-setting-item", "export-backup", "choose-backup"].includes(action)) return;
+    if (isSourcePortal() && [
+      "add-source", "edit-source", "delete-source", "add-setting-item", "edit-setting-item", "delete-setting-item", "move-setting-item", "export-backup", "choose-backup",
+      "delete-service", "add-cash", "edit-cash", "delete-cash", "change-status", "add-note", "edit-note", "delete-note", "add-photo", "edit-photo", "delete-photo",
+    ].includes(action)) return;
 
     if (action === "toggle-nav") document.body.classList.toggle("nav-open");
     if (action === "open-service-modal") openServiceForm();
@@ -501,6 +504,7 @@ function applySourcePortalMode() {
   lockSelectToSource(cashForm.elements.source, false);
   topSourceFilter.hidden = true;
   cashSourceFilter.hidden = true;
+  document.querySelector('[data-action="add-cash"]')?.setAttribute("hidden", "");
   serviceForm.elements.source.closest("label").hidden = true;
   cashForm.elements.source.closest("label").hidden = true;
 }
@@ -569,6 +573,7 @@ function renderDashboard() {
   const cashItems = filteredDashboardCash();
   const cashBalanceItems = filteredDashboardCashForBalance();
   document.querySelector("#dashboardTitle").textContent = portalTitle();
+  document.querySelector("#dashboardOwnerLine").hidden = isSourcePortal();
   renderSourceMetrics(services, cashItems, cashBalanceItems);
   renderDashboardCounters(services);
 
@@ -606,6 +611,11 @@ function renderSourceMetrics(services, cashItems, cashBalanceItems) {
       <b>${money(customerCashBalance(cashBalanceItems))}</b>
       <small>Milat: ${formatDate(isoToday)}</small>
     </article>
+    ${isSourcePortal() ? `<article>
+      <span>Kalan Ödeme</span>
+      <b>${money(cashRemainingBalance(cashBalanceItems))}</b>
+      <small>Milat: ${formatDate(isoToday)}</small>
+    </article>` : ""}
   `;
   document.querySelector("#sourceMetrics").innerHTML = `${sourceCards || `<p class="empty">Servis kaynağı bulunamadı.</p>`}${cashCard}`;
 }
@@ -898,10 +908,10 @@ function cashRow(item) {
       <span>${item.type === "expense" ? "Gider" : "Tahsilat"}${item.serviceId ? ` · ${escapeHtml(item.serviceId)}` : ""}</span>
       <span>${escapeHtml(source || "-")}</span>
       <strong>${item.type === "expense" ? "-" : "+"}${money(item.amount)}</strong>
-      <div class="row-actions">
+      ${canEditPortalRecords() ? `<div class="row-actions">
         <button class="mini-button" type="button" data-action="edit-cash" data-cash-id="${item.id}" title="Düzenle">✎</button>
         <button class="mini-button danger" type="button" data-action="delete-cash" data-cash-id="${item.id}" title="Sil">×</button>
-      </div>
+      </div>` : ""}
     </div>
   `;
 }
@@ -1023,6 +1033,7 @@ function settingsItemsForList(key) {
 }
 
 function openServiceForm(service) {
+  if (isSourcePortal() && service) return;
   serviceForm.reset();
   serviceForm.elements.id.value = "";
   serviceForm.elements.status.value = "Yeni Kayıt";
@@ -1064,6 +1075,7 @@ function openRelatedServiceForm(serviceId) {
 function saveService(formData) {
   const data = Object.fromEntries(formData);
   const isUpdate = Boolean(data.id);
+  if (isSourcePortal() && isUpdate) return;
   const previous = state.services.find((service) => service.id === data.id);
   if (isSourcePortal() && previous && !matchesPortalSource(previous.source)) return;
   if (isSourcePortal()) data.source = portalSourceName();
@@ -1125,7 +1137,7 @@ function renderDetail(id) {
   detailBody.innerHTML = `
     <div class="detail-grid">
       <section class="detail-section">
-        <h3>Müşteri Bilgisi <button class="mini-button" type="button" data-edit-service="${service.id}">✎</button></h3>
+        <h3>Müşteri Bilgisi ${canEditPortalRecords() ? `<button class="mini-button" type="button" data-edit-service="${service.id}">✎</button>` : ""}</h3>
         <dl>
           <dt>Müşteri Adı</dt><dd>${escapeHtml(service.customerName)}</dd>
           <dt>Telefon</dt><dd><a href="tel:${digits(service.phone)}">${escapeHtml(service.phone)}</a></dd>
@@ -1135,7 +1147,7 @@ function renderDetail(id) {
         </dl>
       </section>
       <section class="detail-section">
-        <h3>Cihaz Bilgisi <button class="mini-button" type="button" data-edit-service="${service.id}">✎</button></h3>
+        <h3>Cihaz Bilgisi ${canEditPortalRecords() ? `<button class="mini-button" type="button" data-edit-service="${service.id}">✎</button>` : ""}</h3>
         <dl>
           <dt>Cihaz</dt><dd>${escapeHtml(service.brand)} / ${escapeHtml(service.device)}</dd>
           <dt>Model</dt><dd>${escapeHtml(service.model || "-")}</dd>
@@ -1144,7 +1156,7 @@ function renderDetail(id) {
         </dl>
       </section>
       <section class="detail-section wide">
-        <h3>Servis Durumu <button class="primary-button" type="button" data-action="change-status" data-service-id="${service.id}">Durum Değiştir</button></h3>
+        <h3>Servis Durumu ${canEditPortalRecords() ? `<button class="primary-button" type="button" data-action="change-status" data-service-id="${service.id}">Durum Değiştir</button>` : ""}</h3>
         <dl>
           <dt>Durum</dt><dd><span class="status-pill ${statusClass(service.status)}">${escapeHtml(service.status)}</span></dd>
           <dt>Kaynak</dt><dd>${escapeHtml(service.source)}</dd>
@@ -1162,51 +1174,51 @@ function renderDetail(id) {
         </div>
       </section>
       <section class="detail-section">
-        <h3>Para Hareketleri <button class="primary-button" type="button" data-action="add-cash" data-service-id="${service.id}">Para Ekle</button></h3>
+        <h3>Para Hareketleri ${canEditPortalRecords() ? `<button class="primary-button" type="button" data-action="add-cash" data-service-id="${service.id}">Para Ekle</button>` : ""}</h3>
         <div class="history-list">
           ${linkedCash.map((item) => `
             <div class="history-item">
               <div><b>${escapeHtml(visibleCashTitle(item))}</b><p>${formatDate(item.date)} · ${item.type === "expense" ? "Gider" : "Tahsilat"} · ${money(item.amount)}</p></div>
-              <div class="row-actions">
+              ${canEditPortalRecords() ? `<div class="row-actions">
                 <button class="mini-button" type="button" data-action="edit-cash" data-cash-id="${item.id}">✎</button>
                 <button class="mini-button danger" type="button" data-action="delete-cash" data-cash-id="${item.id}">×</button>
-              </div>
+              </div>` : ""}
             </div>
           `).join("") || `<p class="empty">Henüz para hareketi yok.</p>`}
         </div>
       </section>
       <section class="detail-section">
-        <h3>Servis Notları <button class="primary-button" type="button" data-action="add-note" data-service-id="${service.id}">Not Ekle</button></h3>
+        <h3>Servis Notları ${canEditPortalRecords() ? `<button class="primary-button" type="button" data-action="add-note" data-service-id="${service.id}">Not Ekle</button>` : ""}</h3>
         <div class="history-list">
           ${service.notes.map((note) => `
             <div class="history-item">
               <div><b>${formatDateTime(note.createdAt)}</b><p>${escapeHtml(note.text)}</p></div>
-              <div class="row-actions">
+              ${canEditPortalRecords() ? `<div class="row-actions">
                 <button class="mini-button" type="button" data-action="edit-note" data-service-id="${service.id}" data-note-id="${note.id}">✎</button>
                 <button class="mini-button danger" type="button" data-action="delete-note" data-service-id="${service.id}" data-note-id="${note.id}">×</button>
-              </div>
+              </div>` : ""}
             </div>
           `).join("") || `<p class="empty">Not bulunamadı.</p>`}
         </div>
       </section>
       <section class="detail-section wide">
-        <h3>Servis Fotoğrafları <button class="primary-button" type="button" data-action="add-photo" data-service-id="${service.id}">Fotoğraf Ekle / Çek</button></h3>
+        <h3>Servis Fotoğrafları ${canEditPortalRecords() ? `<button class="primary-button" type="button" data-action="add-photo" data-service-id="${service.id}">Fotoğraf Ekle / Çek</button>` : ""}</h3>
         ${service.photos.length ? `<div class="photo-grid">${service.photos.map((photo) => `
           <article class="photo-card">
             <img src="${photo.dataUrl}" alt="${escapeHtml(photo.caption || "Servis fotoğrafı")}">
             <footer>
               <b>${escapeHtml(photo.caption || "Fotoğraf")}</b>
-              <div class="row-actions">
+              ${canEditPortalRecords() ? `<div class="row-actions">
                 <button class="mini-button" type="button" data-action="edit-photo" data-service-id="${service.id}" data-photo-id="${photo.id}">✎</button>
                 <button class="mini-button danger" type="button" data-action="delete-photo" data-service-id="${service.id}" data-photo-id="${photo.id}">×</button>
-              </div>
+              </div>` : ""}
             </footer>
           </article>
         `).join("")}</div>` : `<p class="empty">Fotoğraf bulunamadı.</p>`}
       </section>
     </div>
     <div class="inline-actions" style="margin-top:12px">
-      <button class="primary-button" type="button" data-edit-service="${service.id}">Servisi Güncelle</button>
+      ${canEditPortalRecords() ? `<button class="primary-button" type="button" data-edit-service="${service.id}">Servisi Güncelle</button>` : ""}
       <button class="secondary-button" type="button" data-action="open-related-service" data-service-id="${service.id}">Yeni Servis Kaydı Aç</button>
       <button class="secondary-button" type="button" data-print-service>Servis Fişi</button>
     </div>
@@ -1222,6 +1234,7 @@ function renderDetail(id) {
 }
 
 function openStatusForm(serviceId) {
+  if (isSourcePortal()) return;
   const service = state.services.find((item) => item.id === serviceId);
   if (!service) return;
   statusForm.reset();
@@ -1233,6 +1246,7 @@ function openStatusForm(serviceId) {
 }
 
 function saveStatus(formData) {
+  if (isSourcePortal()) return;
   const data = Object.fromEntries(formData);
   const service = state.services.find((item) => item.id === data.serviceId);
   if (!service || !matchesPortalSource(service.source)) return;
@@ -1251,6 +1265,7 @@ function saveStatus(formData) {
 }
 
 function openCashForm(options = {}) {
+  if (isSourcePortal()) return;
   cashForm.reset();
   cashForm.elements.id.value = "";
   cashForm.elements.date.value = isoToday;
@@ -1279,6 +1294,7 @@ function openCashForm(options = {}) {
 }
 
 function saveCash(formData) {
+  if (isSourcePortal()) return;
   const data = Object.fromEntries(formData);
   const previous = state.cash.find((item) => item.id === data.id);
   const serviceId = data.serviceId.trim();
@@ -1306,6 +1322,7 @@ function saveCash(formData) {
 }
 
 function deleteCash(id) {
+  if (isSourcePortal()) return;
   const item = state.cash.find((cashItem) => cashItem.id === id);
   if (!item || !matchesPortalSource(cashItemSource(item)) || !confirm(`${visibleCashTitle(item) || "Para hareketi"} silinsin mi?`)) return;
   state.cash = state.cash.filter((cashItem) => cashItem.id !== id && cashItem.parentCashId !== id);
@@ -1315,6 +1332,7 @@ function deleteCash(id) {
 }
 
 function openNoteForm(serviceId, noteId = "") {
+  if (isSourcePortal()) return;
   const service = state.services.find((item) => item.id === serviceId);
   if (!service || !matchesPortalSource(service.source)) return;
   const note = service.notes.find((item) => item.id === noteId);
@@ -1328,6 +1346,7 @@ function openNoteForm(serviceId, noteId = "") {
 }
 
 function saveNote(formData) {
+  if (isSourcePortal()) return;
   const data = Object.fromEntries(formData);
   const service = state.services.find((item) => item.id === data.serviceId);
   if (!service || !matchesPortalSource(service.source)) return;
@@ -1342,6 +1361,7 @@ function saveNote(formData) {
 }
 
 function deleteNote(serviceId, noteId) {
+  if (isSourcePortal()) return;
   serviceId = serviceId || noteForm.elements.serviceId.value;
   noteId = noteId || noteForm.elements.noteId.value;
   const service = state.services.find((item) => item.id === serviceId);
@@ -1353,6 +1373,7 @@ function deleteNote(serviceId, noteId) {
 }
 
 function openPhotoForm(serviceId) {
+  if (isSourcePortal()) return;
   const service = state.services.find((item) => item.id === serviceId);
   if (!service || !matchesPortalSource(service.source)) return;
   photoForm.reset();
@@ -1361,6 +1382,7 @@ function openPhotoForm(serviceId) {
 }
 
 async function savePhoto() {
+  if (isSourcePortal()) return;
   const service = state.services.find((item) => item.id === photoForm.elements.serviceId.value);
   if (!service || !matchesPortalSource(service.source)) return;
   const file = photoForm.elements.photo.files[0] || photoForm.elements.camera.files[0];
@@ -1381,6 +1403,7 @@ async function savePhoto() {
 }
 
 function editPhoto(serviceId, photoId) {
+  if (isSourcePortal()) return;
   const service = state.services.find((item) => item.id === serviceId);
   if (!service || !matchesPortalSource(service.source)) return;
   const photo = service?.photos.find((item) => item.id === photoId);
@@ -1393,6 +1416,7 @@ function editPhoto(serviceId, photoId) {
 }
 
 function deletePhoto(serviceId, photoId) {
+  if (isSourcePortal()) return;
   const service = state.services.find((item) => item.id === serviceId);
   if (!service || !matchesPortalSource(service.source) || !confirm("Fotoğraf silinsin mi?")) return;
   service.photos = service.photos.filter((photo) => photo.id !== photoId);
@@ -1743,6 +1767,10 @@ function matchesPortalSource(source) {
 
 function portalTitle() {
   return isSourcePortal() ? portalSourceName() : (state.company.companyName || "Servis Takip");
+}
+
+function canEditPortalRecords() {
+  return !isSourcePortal();
 }
 
 function isOwnWorkSource(source) {
