@@ -1,4 +1,14 @@
 const STORAGE_KEY = "ekzen-servis-takip-v1";
+const CLOUD_STATE_PATH = "servis_takip_v2/state";
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyArRO3GilYemYHX8sJdzNqv-uG7V6LsskQ",
+  authDomain: "ekzen-teknik.firebaseapp.com",
+  databaseURL: "https://ekzen-teknik-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "ekzen-teknik",
+  storageBucket: "ekzen-teknik.firebasestorage.app",
+  messagingSenderId: "199852526862",
+  appId: "1:199852526862:web:5b2efb44f0a26ca76f5b5f",
+};
 
 const brands = ["Alarko", "Altus", "Arçelik", "Ariston", "Beko", "Bosch", "Demirdöküm", "Lg", "Miele", "Profilo", "Protherm", "Regal", "Samsung", "Seg", "Siemens", "Vaillant", "Vestel"];
 const devices = ["Aspiratör", "Bulaşık Makinası", "Buzdolabı", "Çamaşır Makinası", "Davlumbaz", "Derin Dondurucu", "Fırın", "Kazan", "Klima", "Kombi", "Kurutma Makinası", "Mikrodalga", "Ocak", "Su Sebili", "Süpürge", "Şofben", "Televizyon", "Termosifon", "Vrf"];
@@ -26,6 +36,10 @@ let currentView = "dashboard";
 let activeDetailId = null;
 let activeDashboardStat = "";
 let activeDashboardSource = "";
+let cloudRef = null;
+let cloudReady = false;
+let cloudApplyingState = false;
+let cloudInitialHandled = false;
 
 const views = {
   dashboard: document.querySelector("#dashboardView"),
@@ -67,8 +81,9 @@ function init() {
   fillSelects();
   bindEvents();
   setDefaultDates();
-  saveState();
+  saveLocalState();
   render();
+  initCloudSync();
 }
 
 function loadState() {
@@ -220,8 +235,52 @@ function demoService(id, customerName, phone, district, address, brand, device, 
   };
 }
 
-function saveState() {
+function saveLocalState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+function saveState() {
+  saveLocalState();
+  if (!cloudRef || !cloudReady || cloudApplyingState) return;
+  cloudRef.set({
+    updatedAt: new Date().toISOString(),
+    state,
+  }).catch(() => {
+    console.warn("Firebase kaydı yapılamadı, yerel kayıt korundu.");
+  });
+}
+
+function initCloudSync() {
+  if (!window.firebase?.database) return;
+  try {
+    if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+    cloudRef = firebase.database().ref(CLOUD_STATE_PATH);
+    cloudRef.on("value", (snapshot) => {
+      const data = snapshot.val();
+      cloudReady = true;
+
+      if (data?.state) {
+        cloudApplyingState = true;
+        state = migrateState(data.state);
+        activeDetailId = null;
+        activeDashboardStat = "";
+        activeDashboardSource = "";
+        saveLocalState();
+        cloudApplyingState = false;
+        render();
+      } else if (!cloudInitialHandled) {
+        saveState();
+      }
+
+      cloudInitialHandled = true;
+    }, () => {
+      cloudReady = false;
+      console.warn("Firebase bağlantısı kurulamadı, yerel kayıtla devam ediliyor.");
+    });
+  } catch (error) {
+    cloudReady = false;
+    console.warn("Firebase başlatılamadı, yerel kayıtla devam ediliyor.");
+  }
 }
 
 function exportBackup() {
