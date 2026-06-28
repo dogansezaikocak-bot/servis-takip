@@ -851,7 +851,7 @@ function cashTotals(items = state.cash) {
 }
 
 function cashRemainingBalance(items = state.cash) {
-  return cashTotals(items.filter((item) => item.serviceId || !isOwnWorkSource(cashItemSource(item)))).balance;
+  return cashTotals(items.filter((item) => !isOwnWorkSource(cashItemSource(item)))).balance;
 }
 
 function filteredDashboardServices() {
