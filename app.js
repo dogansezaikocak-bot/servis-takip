@@ -556,12 +556,16 @@ function renderDashboard() {
 
 function renderSourceMetrics(services, cashItems) {
   const sourceList = settingsList("sources");
-  const sourceCards = sourceList.map((source) => `
-    <article class="metric-card is-clickable" data-action="dashboard-source" data-source="${escapeAttr(source)}">
-      <span>${escapeHtml(source)}</span>
-      <b>${services.filter((service) => service.source === source && isOpenDashboardSourceStatus(service.status)).length}</b>
-    </article>
-  `).join("");
+  const sourceCards = sourceList.map((source) => {
+    const commissionTotal = sourceCommissionTotal(cashItems, source);
+    return `
+      <article class="metric-card is-clickable" data-action="dashboard-source" data-source="${escapeAttr(source)}">
+        <span>${escapeHtml(source)}</span>
+        <b>${services.filter((service) => service.source === source && isOpenDashboardSourceStatus(service.status)).length}</b>
+        <small>Komisyon: ${money(commissionTotal)}</small>
+      </article>
+    `;
+  }).join("");
   const cashCard = `
     <article>
       <span>Kasa Durumu</span>
@@ -570,6 +574,12 @@ function renderSourceMetrics(services, cashItems) {
     </article>
   `;
   document.querySelector("#sourceMetrics").innerHTML = `${sourceCards || `<p class="empty">Servis kaynağı bulunamadı.</p>`}${cashCard}`;
+}
+
+function sourceCommissionTotal(cashItems, source) {
+  return cashItems
+    .filter((item) => cashItemSource(item) === source && item.autoCommissionExpense)
+    .reduce((total, item) => total + (Number(item.amount) || 0), 0);
 }
 
 function renderDashboardCounters(services) {
