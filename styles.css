@@ -1400,7 +1400,14 @@ body.nav-open .nav-item b {
   }
 
   .cash-row {
-    padding: 10px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+  }
+
+  .cash-row > span {
+    display: none;
   }
 
   .cash-row-title {
@@ -1409,7 +1416,9 @@ body.nav-open .nav-item b {
   }
 
   .cash-row-amount {
-    font-size: 15px;
+    justify-self: end;
+    white-space: nowrap;
+    font-size: 16px;
   }
 
   input,
