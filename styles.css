@@ -660,9 +660,7 @@ textarea {
   font-size: 28px;
 }
 
-#cashExpense,
-#cashCommission,
-#cashMaterial {
+.cash-summary b.cash-negative {
   color: var(--red);
 }
 

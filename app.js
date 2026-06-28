@@ -16,11 +16,19 @@ const statuses = ["Yeni Kayıt", "İşlemde", "Ödeme Bekliyor", "İşlem Tamam"
 const sources = ["Korkmaz Teknik", "Sedef Teknik", "Kendi İşim", "Diğer", "İnternet Reklamı", "İsa Tuncay", "Servis Pazarı"];
 const cities = ["Ankara", "İstanbul", "Adana", "Antalya", "Bursa", "İzmir", "Kocaeli", "Konya", "Samsun"];
 const dashboardCounters = ["Bugün", "Yarın", "Açık Fişler", "Ödeme Bekliyor", "İşlemde", "Yeni Kayıt", "İşlem Tamam", "Geri Dönen İş", "Toplam Servis"];
-const defaultSettings = { brands, devices, statuses, sources, cities, dashboardCounters };
+const cashCounters = [
+  { key: "income", label: "Toplam Gelir" },
+  { key: "expense", label: "Yapılan Ödeme" },
+  { key: "commission", label: "Komisyon" },
+  { key: "material", label: "Malzeme" },
+  { key: "balance", label: "Kalan Ödeme" },
+];
+const defaultSettings = { brands, devices, statuses, sources, cities, dashboardCounters, cashCounters };
 const settingsLabels = {
   sources: "Servis Kaynakları",
   statuses: "Servis Durumları",
   dashboardCounters: "Ana Sayfa Sayaçları",
+  cashCounters: "Kasa Sayaçları",
   brands: "Markalar",
   devices: "Cihaz Türleri",
   cities: "İller",
@@ -128,6 +136,7 @@ function migrateState(oldState) {
       statuses: ensureValues(uniqueValues(oldState.settings?.statuses || statuses), ["Yeni Kayıt", "İşlemde", "Ödeme Bekliyor", "İşlem Tamam", "Geri Dönen İş", "İptal"]),
       dashboardCounters: dashboardCountersVersion < 3 ? ensureValues(currentCounters, ["Açık Fişler", "Toplam Servis"]) : currentCounters,
       dashboardCountersVersion: 3,
+      cashCounters: normalizeCashCounters(oldState.settings?.cashCounters),
       sources: ensureValues(sourceNames.length ? sourceNames : [...sources], ["Korkmaz Teknik", "Sedef Teknik", "Kendi İşim"]),
       cities: uniqueValues(oldState.settings?.cities || cities),
     },
@@ -174,6 +183,23 @@ function normalizePhotos(photos) {
     dataUrl: photo.dataUrl || photo.url || "",
     createdAt: photo.createdAt || new Date().toISOString(),
   })).filter((photo) => photo.dataUrl);
+}
+
+function normalizeCashCounters(counters) {
+  const defaultsByKey = new Map(cashCounters.map((counter) => [counter.key, counter]));
+  const defaultsByLabel = new Map(cashCounters.map((counter) => [norm(counter.label), counter]));
+  const normalized = [];
+  if (Array.isArray(counters)) {
+    counters.forEach((counter) => {
+      const defaultCounter = typeof counter === "string" ? defaultsByLabel.get(norm(counter)) : defaultsByKey.get(counter?.key);
+      if (!defaultCounter || normalized.some((item) => item.key === defaultCounter.key)) return;
+      normalized.push({ key: defaultCounter.key, label: String(counter?.label || defaultCounter.label) });
+    });
+  }
+  cashCounters.forEach((counter) => {
+    if (!normalized.some((item) => item.key === counter.key)) normalized.push({ ...counter });
+  });
+  return normalized;
 }
 
 function normalizeStatusHistory(service) {
@@ -716,12 +742,24 @@ function renderCash() {
   const items = filteredCash();
   const totals = cashTotals(items);
   const breakdown = cashBreakdown(items);
-  document.querySelector("#cashIncome").textContent = money(totals.income);
-  document.querySelector("#cashExpense").textContent = `-${money(breakdown.manualExpense)}`;
-  document.querySelector("#cashCommission").textContent = `-${money(breakdown.commission)}`;
-  document.querySelector("#cashMaterial").textContent = `-${money(breakdown.material)}`;
-  document.querySelector("#cashBalance").textContent = money(cashRemainingBalance(items));
+  renderCashSummary(items, totals, breakdown);
   document.querySelector("#cashList").innerHTML = renderCashGroups(items) || `<p class="empty">Para hareketi bulunamadı.</p>`;
+}
+
+function renderCashSummary(items, totals, breakdown) {
+  const values = {
+    income: money(totals.income),
+    expense: `-${money(breakdown.manualExpense)}`,
+    commission: `-${money(breakdown.commission)}`,
+    material: `-${money(breakdown.material)}`,
+    balance: money(cashRemainingBalance(items)),
+  };
+  document.querySelector("#cashSummary").innerHTML = cashCounterList().map((counter) => `
+    <article>
+      <span>${escapeHtml(counter.label)}</span>
+      <b class="${["expense", "commission", "material"].includes(counter.key) ? "cash-negative" : ""}">${values[counter.key] || money(0)}</b>
+    </article>
+  `).join("");
 }
 
 function renderCashGroups(items) {
@@ -904,23 +942,28 @@ function renderSettingsLists() {
     <section class="settings-list">
       <header>
         <h3>${escapeHtml(label)}</h3>
-        <button class="mini-button" type="button" data-action="add-setting-item" data-list="${key}" title="Ekle">+</button>
+        ${key === "cashCounters" ? "" : `<button class="mini-button" type="button" data-action="add-setting-item" data-list="${key}" title="Ekle">+</button>`}
       </header>
       <div>
-        ${settingsList(key).map((value) => `
+        ${settingsItemsForList(key).map((item) => `
           <div class="setting-chip">
-            <span>${escapeHtml(value)}</span>
+            <span>${escapeHtml(item.label)}</span>
             <div class="row-actions">
-              ${["sources", "statuses", "dashboardCounters"].includes(key) ? `<button class="mini-button" type="button" data-action="move-setting-item" data-list="${key}" data-value="${escapeAttr(value)}" data-direction="up" title="Yukarı">↑</button>
-              <button class="mini-button" type="button" data-action="move-setting-item" data-list="${key}" data-value="${escapeAttr(value)}" data-direction="down" title="Aşağı">↓</button>` : ""}
-              <button class="mini-button" type="button" data-action="edit-setting-item" data-list="${key}" data-value="${escapeAttr(value)}" title="Düzenle">✎</button>
-              <button class="mini-button danger" type="button" data-action="delete-setting-item" data-list="${key}" data-value="${escapeAttr(value)}" title="Sil">×</button>
+              ${["sources", "statuses", "dashboardCounters", "cashCounters"].includes(key) ? `<button class="mini-button" type="button" data-action="move-setting-item" data-list="${key}" data-value="${escapeAttr(item.value)}" data-direction="up" title="Yukarı">↑</button>
+              <button class="mini-button" type="button" data-action="move-setting-item" data-list="${key}" data-value="${escapeAttr(item.value)}" data-direction="down" title="Aşağı">↓</button>` : ""}
+              <button class="mini-button" type="button" data-action="edit-setting-item" data-list="${key}" data-value="${escapeAttr(item.value)}" title="Düzenle">✎</button>
+              ${key === "cashCounters" ? "" : `<button class="mini-button danger" type="button" data-action="delete-setting-item" data-list="${key}" data-value="${escapeAttr(item.value)}" title="Sil">×</button>`}
             </div>
           </div>
         `).join("") || `<p class="empty">Kayıt yok.</p>`}
       </div>
     </section>
   `).join("");
+}
+
+function settingsItemsForList(key) {
+  if (key === "cashCounters") return cashCounterList().map((counter) => ({ value: counter.key, label: counter.label }));
+  return settingsList(key).map((value) => ({ value, label: value }));
 }
 
 function openServiceForm(service) {
@@ -1325,6 +1368,7 @@ function deleteSource(name) {
 }
 
 function addSettingItem(listKey) {
+  if (listKey === "cashCounters") return;
   const label = settingsLabels[listKey] || "Ayar";
   const value = prompt(`${label} için yeni kayıt`);
   if (value === null) return;
@@ -1334,6 +1378,16 @@ function addSettingItem(listKey) {
 }
 
 function editSettingItem(listKey, oldValue) {
+  if (listKey === "cashCounters") {
+    const counter = cashCounterList().find((item) => item.key === oldValue);
+    if (!counter) return;
+    const value = prompt("Kasa sayacı adını düzenle", counter.label);
+    if (value === null || !value.trim()) return;
+    state.settings.cashCounters = cashCounterList().map((item) => item.key === oldValue ? { ...item, label: value.trim() } : item);
+    saveState();
+    render();
+    return;
+  }
   const value = prompt(`${settingsLabels[listKey] || "Ayar"} düzenle`, oldValue);
   if (value === null) return;
   updateSettingItem(listKey, oldValue, value.trim());
@@ -1342,6 +1396,7 @@ function editSettingItem(listKey, oldValue) {
 }
 
 function deleteSettingItem(listKey, value) {
+  if (listKey === "cashCounters") return;
   if (!confirm(`${value} silinsin mi?`)) return;
   removeSettingValue(listKey, value);
   saveState();
@@ -1367,12 +1422,12 @@ function removeSettingValue(listKey, value) {
 }
 
 function moveSettingItem(listKey, value, direction) {
-  const list = settingsList(listKey);
-  const index = list.indexOf(value);
+  const list = listKey === "cashCounters" ? cashCounterList() : settingsList(listKey);
+  const index = listKey === "cashCounters" ? list.findIndex((item) => item.key === value) : list.indexOf(value);
   const target = direction === "up" ? index - 1 : index + 1;
   if (index < 0 || target < 0 || target >= list.length) return;
   [list[index], list[target]] = [list[target], list[index]];
-  state.settings[listKey] = [...list];
+  state.settings[listKey] = listKey === "cashCounters" ? list.map((item) => ({ ...item })) : [...list];
   saveState();
   render();
 }
@@ -1554,12 +1609,22 @@ function syncServiceCash(service) {
 
 function settingsList(key) {
   if (!state.settings) state.settings = cloneSettings(defaultSettings);
-  if (!Array.isArray(state.settings[key])) state.settings[key] = [...defaultSettings[key]];
+  if (!Array.isArray(state.settings[key])) state.settings[key] = cloneSettingValue(defaultSettings[key] || []);
   return state.settings[key];
 }
 
+function cashCounterList() {
+  if (!state.settings) state.settings = cloneSettings(defaultSettings);
+  state.settings.cashCounters = normalizeCashCounters(state.settings.cashCounters);
+  return state.settings.cashCounters;
+}
+
 function cloneSettings(settings) {
-  return Object.fromEntries(Object.entries(settings).map(([key, value]) => [key, [...value]]));
+  return Object.fromEntries(Object.entries(settings).map(([key, value]) => [key, cloneSettingValue(value)]));
+}
+
+function cloneSettingValue(value) {
+  return Array.isArray(value) ? value.map((item) => typeof item === "object" && item ? { ...item } : item) : value;
 }
 
 function uniqueValues(values) {
