@@ -616,7 +616,8 @@ function renderSourceMetrics(services, cashItems, cashBalanceItems) {
       <b>${money(cashRemainingBalance(cashBalanceItems))}</b>
     </article>` : ""}
   `;
-  document.querySelector("#sourceMetrics").innerHTML = `${sourceCards || `<p class="empty">Servis kaynağı bulunamadı.</p>`}${cashCard}`;
+  const emptySourceMessage = isSourcePortal() ? "" : `<p class="empty">Servis kaynağı bulunamadı.</p>`;
+  document.querySelector("#sourceMetrics").innerHTML = `${sourceCards || emptySourceMessage}${cashCard}`;
 }
 
 function renderDashboardCounters(services) {

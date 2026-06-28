@@ -1118,39 +1118,43 @@ body.nav-open .nav-item b {
   }
 
   .dashboard-band {
-    padding: 14px;
+    padding: 12px 10px;
     border-radius: 0;
-    margin: 0 -10px 10px;
+    margin: 0 -10px 8px;
     grid-template-columns: 1fr;
-    gap: 12px;
+    gap: 10px;
   }
 
   .dashboard-band h2 {
-    font-size: 22px;
+    font-size: 24px;
     margin-bottom: 4px;
   }
 
   .dashboard-date-filters {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 6px;
-    margin-top: 10px;
+    gap: 5px;
+    margin-top: 8px;
   }
 
   .dashboard-date-filters input {
     width: 100%;
     min-width: 0;
+    min-height: 34px;
+    height: 34px;
+    padding: 4px 6px;
+    font-size: 12px;
   }
 
   .metric-grid,
   .cash-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+    gap: 7px;
   }
 
   .metric-grid article {
     min-width: 0;
-    padding-top: 8px;
+    padding-top: 7px;
   }
 
   .metric-grid span,
@@ -1160,8 +1164,8 @@ body.nav-open .nav-item b {
   }
 
   .metric-grid b {
-    margin-top: 5px;
-    font-size: 21px;
+    margin-top: 4px;
+    font-size: 20px;
   }
 
   .metric-grid small {
@@ -1175,13 +1179,13 @@ body.nav-open .nav-item b {
   .stat-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
-    margin: 10px 0;
+    margin: 8px 0;
   }
 
   .stat-box,
   .cash-summary article {
-    min-height: 88px;
-    padding: 12px;
+    min-height: 76px;
+    padding: 10px;
     border-radius: 8px;
   }
 
@@ -1191,8 +1195,8 @@ body.nav-open .nav-item b {
   }
 
   .stat-box b {
-    margin-top: 8px;
-    font-size: 30px;
+    margin-top: 6px;
+    font-size: 28px;
   }
 
   fieldset,
@@ -1209,6 +1213,20 @@ body.nav-open .nav-item b {
   .list-footer {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .single-column {
+    gap: 10px;
+  }
+
+  .panel-title {
+    min-height: 48px;
+    padding: 10px 12px;
+  }
+
+  .panel-title h2,
+  .panel-title h3 {
+    font-size: 20px;
   }
 
   .sort-bar {
@@ -1281,9 +1299,17 @@ body.nav-open .nav-item b {
     min-height: 44px;
   }
 
+  .dashboard-date-filters input {
+    min-height: 34px;
+    height: 34px;
+  }
+
   .compact-row {
     align-items: flex-start;
     flex-direction: column;
+    min-height: 0;
+    padding: 10px 12px;
+    gap: 8px;
   }
 
   .compact-meta {
