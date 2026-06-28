@@ -568,7 +568,7 @@ function renderDashboard() {
   const services = filteredDashboardServices();
   const cashItems = filteredDashboardCash();
   const cashBalanceItems = filteredDashboardCashForBalance();
-  document.querySelector("#dashboardTitle").textContent = state.company.companyName;
+  document.querySelector("#dashboardTitle").textContent = portalTitle();
   renderSourceMetrics(services, cashItems, cashBalanceItems);
   renderDashboardCounters(services);
 
@@ -588,7 +588,7 @@ function renderDashboard() {
 }
 
 function renderSourceMetrics(services, cashItems, cashBalanceItems) {
-  const sourceList = isSourcePortal() ? [portalSourceName()] : settingsList("sources");
+  const sourceList = isSourcePortal() ? [] : settingsList("sources");
   const sourceCards = sourceList.map((source) => {
     const sourceCashItems = cashItems.filter((item) => cashItemSource(item) === source);
     const remainingTotal = cashRemainingBalance(sourceCashItems);
