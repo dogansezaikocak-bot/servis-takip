@@ -609,12 +609,11 @@ function renderSourceMetrics(services, cashItems, cashBalanceItems) {
     <article>
       <span>Kasa Durumu</span>
       <b>${money(customerCashBalance(cashBalanceItems))}</b>
-      <small>Milat: ${formatDate(isoToday)}</small>
+      ${isSourcePortal() ? "" : `<small>Milat: ${formatDate(isoToday)}</small>`}
     </article>
     ${isSourcePortal() ? `<article>
       <span>Kalan Ödeme</span>
       <b>${money(cashRemainingBalance(cashBalanceItems))}</b>
-      <small>Milat: ${formatDate(isoToday)}</small>
     </article>` : ""}
   `;
   document.querySelector("#sourceMetrics").innerHTML = `${sourceCards || `<p class="empty">Servis kaynağı bulunamadı.</p>`}${cashCard}`;
@@ -956,6 +955,7 @@ function filteredDashboardCash() {
 function filteredDashboardCashForBalance() {
   const start = dashboardStartDate.value;
   const end = dashboardEndDate.value;
+  if (isSourcePortal()) return filteredDashboardCash();
   if (start || end) return filteredDashboardCash();
   const week = currentWeekRange();
   return state.cash.filter((item) => matchesPortalSource(cashItemSource(item)) && dateInRange(item.date || "", week.start, week.end));
