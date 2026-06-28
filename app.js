@@ -720,7 +720,7 @@ function renderCash() {
   document.querySelector("#cashExpense").textContent = `-${money(breakdown.manualExpense)}`;
   document.querySelector("#cashCommission").textContent = `-${money(breakdown.commission)}`;
   document.querySelector("#cashMaterial").textContent = `-${money(breakdown.material)}`;
-  document.querySelector("#cashBalance").textContent = money(totals.balance);
+  document.querySelector("#cashBalance").textContent = money(cashRemainingBalance(items));
   document.querySelector("#cashList").innerHTML = renderCashGroups(items) || `<p class="empty">Para hareketi bulunamadı.</p>`;
 }
 
@@ -848,6 +848,10 @@ function cashTotals(items = state.cash) {
     totals.balance = totals.income - totals.expense;
     return totals;
   }, { income: 0, expense: 0, balance: 0 });
+}
+
+function cashRemainingBalance(items = state.cash) {
+  return cashTotals(items.filter((item) => item.serviceId || !isOwnWorkSource(cashItemSource(item)))).balance;
 }
 
 function filteredDashboardServices() {
