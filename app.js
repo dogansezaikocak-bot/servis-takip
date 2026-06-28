@@ -881,7 +881,9 @@ function cashBreakdown(items = state.cash) {
 function customerCashBalance(items = state.cash) {
   const serviceItems = items.filter((item) => item.serviceId);
   const totals = cashBreakdown(serviceItems);
-  return totals.income - totals.material - totals.commission;
+  const ownWorkManualItems = items.filter((item) => !item.serviceId && isOwnWorkSource(cashItemSource(item)));
+  const ownWorkManualTotals = cashTotals(ownWorkManualItems);
+  return totals.income - totals.material - totals.commission + ownWorkManualTotals.balance;
 }
 
 function renderSettings() {
@@ -1587,6 +1589,10 @@ function serviceSource(serviceId) {
 
 function cashItemSource(item) {
   return serviceSource(item.serviceId) || item.source || "";
+}
+
+function isOwnWorkSource(source) {
+  return norm(source) === norm("Kendi İşim");
 }
 
 function visibleCashTitle(item) {
