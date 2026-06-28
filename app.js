@@ -260,9 +260,10 @@ function initCloudSync() {
       cloudReady = true;
 
       if (data?.state) {
+        const openDetailId = detailDialog.open ? activeDetailId : null;
         cloudApplyingState = true;
         state = migrateState(data.state);
-        activeDetailId = null;
+        activeDetailId = openDetailId && state.services.some((service) => service.id === openDetailId) ? openDetailId : null;
         activeDashboardStat = "";
         activeDashboardSource = "";
         saveLocalState();
