@@ -1261,6 +1261,90 @@ body.nav-open .nav-item b {
     width: 100%;
   }
 
+  #cashView .panel-title {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  #cashView .panel-tools {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+    align-items: end;
+  }
+
+  #cashView .panel-tools .secondary-button {
+    min-height: 36px;
+    padding: 7px 10px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .cash-date-filters {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .cash-date-filters input {
+    width: 100%;
+    min-width: 0;
+    min-height: 32px;
+    height: 32px;
+    padding: 4px 6px;
+    font-size: 12px;
+  }
+
+  .cash-summary {
+    padding: 8px;
+  }
+
+  .cash-summary article {
+    min-height: 72px;
+    padding: 9px;
+  }
+
+  .cash-summary b {
+    margin-top: 7px;
+    font-size: 21px;
+  }
+
+  .cash-group {
+    margin: 8px;
+    border-radius: 8px;
+  }
+
+  .cash-group > header {
+    min-height: 0;
+    padding: 10px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .cash-group > header b,
+  .cash-group > header span {
+    overflow-wrap: anywhere;
+  }
+
+  .cash-service-summary,
+  .cash-group-summary {
+    justify-content: start;
+    text-align: left;
+  }
+
+  .cash-service-summary strong {
+    font-size: 14px;
+    white-space: normal;
+  }
+
+  .cash-service-summary span,
+  .cash-group-summary span,
+  .cash-group-summary strong {
+    white-space: normal;
+  }
+
   .service-table {
     overflow-x: visible;
   }
@@ -1313,6 +1397,19 @@ body.nav-open .nav-item b {
   .cash-row {
     grid-template-columns: 1fr;
     gap: 6px;
+  }
+
+  .cash-row {
+    padding: 10px;
+  }
+
+  .cash-row-title {
+    color: var(--ink);
+    overflow-wrap: anywhere;
+  }
+
+  .cash-row-amount {
+    font-size: 15px;
   }
 
   input,

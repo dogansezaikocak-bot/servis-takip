@@ -904,11 +904,11 @@ function cashRow(item) {
   const title = visibleCashTitle(item);
   return `
     <div class="data-row cash-row ${item.type === "expense" ? "is-expense" : ""}">
-      <strong>${escapeHtml(title)}${badge ? `<small>${badge}</small>` : ""}</strong>
+      <strong class="cash-row-title">${escapeHtml(title)}${badge ? `<small>${badge}</small>` : ""}</strong>
       <span>${formatDate(item.date)}</span>
       <span>${item.type === "expense" ? "Gider" : "Tahsilat"}${item.serviceId ? ` · ${escapeHtml(item.serviceId)}` : ""}</span>
       <span>${escapeHtml(source || "-")}</span>
-      <strong>${item.type === "expense" ? "-" : "+"}${money(item.amount)}</strong>
+      <strong class="cash-row-amount">${item.type === "expense" ? "-" : "+"}${money(item.amount)}</strong>
       ${canEditPortalRecords() ? `<div class="row-actions">
         <button class="mini-button" type="button" data-action="edit-cash" data-cash-id="${item.id}" title="Düzenle">✎</button>
         <button class="mini-button danger" type="button" data-action="delete-cash" data-cash-id="${item.id}" title="Sil">×</button>
@@ -1823,7 +1823,7 @@ function formatDateTimeWithDay(value) {
 }
 
 function money(value) {
-  return new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY", maximumFractionDigits: 2 }).format(Number(value) || 0);
+  return new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Number(value) || 0);
 }
 
 function escapeAttr(value) {
