@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ekzen Servis Takip</title>
+  <link rel="stylesheet" href="./styles.css?v=20260628-telefon">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="rail" aria-label="Ana menü">
+      <button class="rail-toggle" type="button" data-action="toggle-nav" title="Menü">☰</button>
+      <nav class="rail-nav">
+        <button class="nav-item is-active" type="button" data-view="dashboard" title="Ana Sayfa"><span>⌂</span><b>Ana Sayfa</b></button>
+        <button class="nav-item" type="button" data-view="services" title="Servisler"><span>➤</span><b>Servisler</b></button>
+        <button class="nav-item" type="button" data-view="customers" title="Müşteriler"><span>◉</span><b>Müşteriler</b></button>
+        <button class="nav-item" type="button" data-view="sources" title="Servis Kaynakları"><span>◈</span><b>Kaynaklar</b></button>
+        <button class="nav-item" type="button" data-view="cash" title="Kasa"><span>₺</span><b>Kasa</b></button>
+        <button class="nav-item" type="button" data-view="settings" title="Ayarlar"><span>⚙</span><b>Ayarlar</b></button>
+      </nav>
+    </aside>
+
+    <main class="workspace">
+      <header class="topbar">
+        <div>
+          <h1 id="companyTitle">Ekzen Teknik</h1>
+          <p id="pageSubtitle">Servis takip paneli</p>
+        </div>
+        <div class="top-actions">
+          <button class="icon-button" type="button" data-action="print" title="Yazdır">⎙</button>
+          <button class="primary-button" type="button" data-action="open-service-modal">Yeni Servis</button>
+        </div>
+      </header>
+
+      <section class="view is-visible" id="dashboardView" aria-labelledby="dashboardTitle">
+        <div class="dashboard-band">
+          <div>
+            <h2 id="dashboardTitle">Ekzen Teknik</h2>
+            <p>Doğan Sezai Koçak · Patron</p>
+            <div class="dashboard-date-filters" aria-label="Ana sayfa tarih aralığı">
+              <input id="dashboardStartDate" type="date" aria-label="Ana sayfa başlangıç tarihi">
+              <input id="dashboardEndDate" type="date" aria-label="Ana sayfa bitiş tarihi">
+            </div>
+          </div>
+          <div class="metric-grid" id="sourceMetrics"></div>
+        </div>
+
+        <div class="stat-row" id="dashboardCounters"></div>
+
+        <div class="single-column">
+          <section class="panel">
+            <div class="panel-title">
+              <h3>Yaklaşan Planlar</h3>
+              <button class="ghost-button" type="button" data-view-jump="services">Listeye Git</button>
+            </div>
+            <div id="planList" class="compact-list"></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="view" id="servicesView" aria-labelledby="servicesTitle">
+        <div class="service-layout">
+          <section class="panel list-panel">
+            <div class="panel-title list-title">
+              <h2>SERVİS LİSTESİ</h2>
+              <form class="sort-bar" id="filterForm">
+                <input name="query" type="search" placeholder="Ara">
+                <select id="topSourceFilter" aria-label="Servis kaynağı filtresi"></select>
+                <select id="topStatusFilter" aria-label="Servis durumu filtresi"></select>
+                <button class="ghost-button" type="button" data-action="clear-selected">Seçimleri Temizle</button>
+              </form>
+            </div>
+            <div class="service-table" id="serviceList"></div>
+            <div class="list-footer">
+              <strong id="resultCount">Toplam Sonuç Sayısı : 0</strong>
+              <button class="secondary-button" type="button" data-action="print-list">Listeyi Yazdır</button>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="view" id="customersView">
+        <section class="panel">
+          <div class="panel-title">
+            <h2>Müşteriler</h2>
+            <button class="primary-button" type="button" data-action="open-service-modal">Yeni Servis</button>
+          </div>
+          <div id="customerList" class="data-grid"></div>
+        </section>
+      </section>
+
+      <section class="view" id="sourcesView">
+        <section class="panel">
+          <div class="panel-title">
+            <h2>Servis Kaynakları</h2>
+            <button class="primary-button" type="button" data-action="add-source">Kaynak Ekle</button>
+          </div>
+          <div id="sourceList" class="data-grid"></div>
+        </section>
+      </section>
+
+      <section class="view" id="cashView">
+        <section class="panel">
+            <div class="panel-title">
+              <h2>Kasa</h2>
+            <div class="panel-tools">
+              <div class="cash-date-filters">
+                <input id="cashStartDate" type="date" aria-label="Kasa başlangıç tarihi">
+                <input id="cashEndDate" type="date" aria-label="Kasa bitiş tarihi">
+              </div>
+              <select id="cashSourceFilter" aria-label="Kasa servis kaynağı"></select>
+              <button class="secondary-button" type="button" data-action="print-cash">PDF / Yazdır</button>
+              <button class="primary-button" type="button" data-action="add-cash">Para Hareketi</button>
+            </div>
+          </div>
+          <div class="cash-summary">
+            <article><span>Toplam Gelir</span><b id="cashIncome">0 TL</b></article>
+            <article><span>Yapılan Ödeme</span><b id="cashExpense">0 TL</b></article>
+            <article><span>Komisyon</span><b id="cashCommission">0 TL</b></article>
+            <article><span>Malzeme</span><b id="cashMaterial">0 TL</b></article>
+            <article><span>Kalan Ödeme</span><b id="cashBalance">0 TL</b></article>
+          </div>
+          <div id="cashList" class="data-grid"></div>
+        </section>
+      </section>
+
+      <section class="view" id="settingsView">
+        <section class="panel settings-panel">
+          <h2>Ayarlar</h2>
+          <div class="backup-actions">
+            <button class="primary-button" type="button" data-action="export-backup">Yedek Al</button>
+            <button class="secondary-button" type="button" data-action="choose-backup">Yedekten Yükle</button>
+            <input id="backupFileInput" type="file" accept="application/json,.json" hidden>
+          </div>
+          <form id="settingsForm" class="settings-form">
+            <label>Firma Adı<input name="companyName" type="text"></label>
+            <label>Yetkili<input name="ownerName" type="text"></label>
+            <label>Telefon<input name="phone" type="tel"></label>
+            <label>E-posta<input name="email" type="email"></label>
+            <label>Adres<textarea name="address" rows="3"></textarea></label>
+            <button class="primary-button" type="submit">Kaydet</button>
+          </form>
+          <div id="settingsLists" class="settings-lists"></div>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="serviceDialog" class="dialog">
+    <form method="dialog" class="dialog-shell" id="serviceForm">
+      <header>
+        <h2 id="serviceDialogTitle">Yeni Servis</h2>
+        <button class="icon-button" type="button" data-action="close-service-modal" title="Kapat">×</button>
+      </header>
+      <div class="dialog-body service-form-grid">
+        <input name="id" type="hidden">
+        <fieldset>
+          <legend>Müşteri Bilgisi</legend>
+          <label>Müşteri Adı<input name="customerName" type="text"></label>
+          <label>Telefon<input name="phone" type="tel"></label>
+          <label class="wide">Adres<textarea name="address" rows="3"></textarea></label>
+          <label>Müsait Tarih<input name="availableDate" type="date"></label>
+          <label>Saat Aralığı<input name="availableTime" type="text" placeholder="08:00 ile 22:00 arası"></label>
+        </fieldset>
+        <fieldset>
+          <legend>Cihaz Bilgisi</legend>
+          <label>Marka<select name="brand"></select></label>
+          <label>Cihaz Türü<select name="device"></select></label>
+          <label>Model<input name="model" type="text"></label>
+          <label>Garanti Bitiş<input name="warrantyEnd" type="date"></label>
+          <label class="wide">Cihaz Arızası<textarea name="fault" rows="3"></textarea></label>
+        </fieldset>
+        <fieldset>
+          <legend>Servis Bilgisi</legend>
+          <label>Servis Kaynağı<select name="source"></select></label>
+          <label>Servis Durumu<select name="status"></select></label>
+          <label class="wide">Operatör Notu<textarea name="operatorNote" rows="3"></textarea></label>
+        </fieldset>
+      </div>
+      <footer>
+        <button class="danger-button" type="button" data-action="delete-service">Sil</button>
+        <span></span>
+        <button class="secondary-button" type="button" data-action="close-service-modal">Vazgeç</button>
+        <button class="primary-button" type="submit">Kaydet</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <dialog id="detailDialog" class="dialog detail-dialog">
+    <div class="dialog-shell">
+      <header>
+        <h2 id="detailTitle">Servis Detay</h2>
+        <button class="icon-button" type="button" data-action="close-detail-modal" title="Kapat">×</button>
+      </header>
+      <div id="detailBody" class="dialog-body"></div>
+    </div>
+  </dialog>
+
+  <dialog id="cashDialog" class="dialog small-dialog">
+    <form method="dialog" class="dialog-shell" id="cashForm">
+      <header>
+        <h2 id="cashDialogTitle">Para Hareketi</h2>
+        <button class="icon-button" type="button" data-action="close-cash-modal" title="Kapat">×</button>
+      </header>
+      <div class="dialog-body cash-form-grid">
+        <input name="id" type="hidden">
+        <label>Tarih<input name="date" type="date"></label>
+        <label>Tip
+          <select name="type">
+            <option value="income">Tahsilat</option>
+            <option value="expense">Gider</option>
+          </select>
+        </label>
+        <label class="wide">Açıklama<input name="title" type="text" placeholder="İsteğe bağlı"></label>
+        <label>Tutar<input name="amount" type="number" min="0" step="0.01"></label>
+        <label>Malzeme Gideri<input name="materialCost" type="number" min="0" step="0.01" placeholder="0"></label>
+        <label>Servis Kaynağı<select name="source"></select></label>
+        <label class="wide checkbox-line"><input name="commission50" type="checkbox" value="yes"> Malzeme varsa düştükten sonra, yoksa toplam tutardan %50 komisyon gideri oluştur</label>
+        <label>Bağlı Servis No<input name="serviceId" type="text" placeholder="İsteğe bağlı"></label>
+      </div>
+      <footer>
+        <button class="danger-button" type="button" data-action="delete-cash">Sil</button>
+        <span></span>
+        <button class="secondary-button" type="button" data-action="close-cash-modal">Vazgeç</button>
+        <button class="primary-button" type="submit">Kaydet</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <dialog id="statusDialog" class="dialog small-dialog">
+    <form method="dialog" class="dialog-shell" id="statusForm">
+      <header>
+        <h2>Servis Durumu</h2>
+        <button class="icon-button" type="button" data-action="close-status-modal" title="Kapat">×</button>
+      </header>
+      <div class="dialog-body cash-form-grid">
+        <input name="serviceId" type="hidden">
+        <label class="wide">Durum<select name="status"></select></label>
+        <label>Tarih<input name="date" type="date"></label>
+        <label class="wide">Açıklama<textarea name="description" rows="4"></textarea></label>
+      </div>
+      <footer>
+        <span></span><span></span>
+        <button class="secondary-button" type="button" data-action="close-status-modal">Vazgeç</button>
+        <button class="primary-button" type="submit">Kaydet</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <dialog id="noteDialog" class="dialog small-dialog">
+    <form method="dialog" class="dialog-shell" id="noteForm">
+      <header>
+        <h2 id="noteDialogTitle">Servis Notu</h2>
+        <button class="icon-button" type="button" data-action="close-note-modal" title="Kapat">×</button>
+      </header>
+      <div class="dialog-body">
+        <input name="serviceId" type="hidden">
+        <input name="noteId" type="hidden">
+        <label>Not<textarea name="text" rows="6"></textarea></label>
+      </div>
+      <footer>
+        <button class="danger-button" type="button" data-action="delete-note">Sil</button>
+        <span></span>
+        <button class="secondary-button" type="button" data-action="close-note-modal">Vazgeç</button>
+        <button class="primary-button" type="submit">Kaydet</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <dialog id="sourceDialog" class="dialog small-dialog">
+    <form method="dialog" class="dialog-shell" id="sourceForm">
+      <header>
+        <h2 id="sourceDialogTitle">Servis Kaynağı</h2>
+        <button class="icon-button" type="button" data-action="close-source-modal" title="Kapat">×</button>
+      </header>
+      <div class="dialog-body cash-form-grid">
+        <input name="oldName" type="hidden">
+        <label class="wide">Kaynak Adı<input name="name" type="text"></label>
+      </div>
+      <footer>
+        <button class="danger-button" type="button" data-action="delete-source">Sil</button>
+        <span></span>
+        <button class="secondary-button" type="button" data-action="close-source-modal">Vazgeç</button>
+        <button class="primary-button" type="submit">Kaydet</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <dialog id="photoDialog" class="dialog small-dialog">
+    <form method="dialog" class="dialog-shell" id="photoForm">
+      <header>
+        <h2>Servis Fotoğrafı</h2>
+        <button class="icon-button" type="button" data-action="close-photo-modal" title="Kapat">×</button>
+      </header>
+      <div class="dialog-body">
+        <input name="serviceId" type="hidden">
+        <label>Açıklama<input name="caption" type="text"></label>
+        <label>Fotoğraf Seç<input name="photo" type="file" accept="image/*"></label>
+        <label>Fotoğraf Çek<input name="camera" type="file" accept="image/*" capture="environment"></label>
+      </div>
+      <footer>
+        <span></span><span></span>
+        <button class="secondary-button" type="button" data-action="close-photo-modal">Vazgeç</button>
+        <button class="primary-button" type="submit">Ekle</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <script src="./app.js?v=20260628-telefon"></script>
+</body>
+</html>
