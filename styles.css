@@ -239,6 +239,12 @@ button {
   opacity: .78;
 }
 
+.metric-grid .metric-subtotal {
+  font-size: 14px;
+  line-height: 1.25;
+  opacity: .95;
+}
+
 .stat-row {
   margin: 18px 0;
 }
@@ -1155,7 +1161,11 @@ body.nav-open .nav-item b {
   }
 
   .metric-grid small {
-    font-size: 10px;
+    font-size: 11px;
+  }
+
+  .metric-grid .metric-subtotal {
+    font-size: 12px;
   }
 
   .stat-row {
