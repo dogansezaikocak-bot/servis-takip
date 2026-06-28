@@ -539,7 +539,7 @@ function setDefaultDates() {
 }
 
 function switchView(view) {
-  if (isSourcePortal() && !["dashboard", "cash"].includes(view)) view = "dashboard";
+  if (isSourcePortal() && !["dashboard", "cash", "services"].includes(view)) view = "dashboard";
   currentView = view;
   Object.entries(views).forEach(([key, element]) => element.classList.toggle("is-visible", key === view));
   document.querySelectorAll(".nav-item").forEach((item) => item.classList.toggle("is-active", item.dataset.view === view));
