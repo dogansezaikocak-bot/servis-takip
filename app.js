@@ -342,6 +342,7 @@ function bindEvents() {
 
     if (action === "toggle-nav") document.body.classList.toggle("nav-open");
     if (action === "open-service-modal") openServiceForm();
+    if (action === "open-service-detail") openDetail(button.dataset.serviceId);
     if (action === "open-related-service") openRelatedServiceForm(button.dataset.serviceId);
     if (action === "close-service-modal") serviceDialog.close();
     if (action === "close-detail-modal") detailDialog.close();
@@ -516,7 +517,7 @@ function renderDashboard() {
     .sort((a, b) => (a.availableDate || "").localeCompare(b.availableDate || ""))
     .slice(0, 5);
   document.querySelector("#planList").innerHTML = plans.length ? plans.map((service) => `
-    <button class="compact-row" type="button" data-service-id="${service.id}">
+    <button class="compact-row" type="button" data-action="open-service-detail" data-service-id="${service.id}">
       <span><b>${escapeHtml(service.customerName)}</b><br>${escapeHtml(service.brand)} - ${escapeHtml(service.device)}</span>
       <span class="compact-meta">
         <strong>${formatDate(service.availableDate)}</strong>
