@@ -77,6 +77,10 @@ button {
   place-items: center;
 }
 
+.nav-item[hidden] {
+  display: none !important;
+}
+
 .rail-toggle {
   margin-bottom: 12px;
   font-size: 22px;

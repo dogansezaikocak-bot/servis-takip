@@ -497,6 +497,7 @@ function applySourcePortalMode() {
   document.body.classList.add("source-portal");
   document.querySelectorAll('[data-view="services"], [data-view="customers"], [data-view="sources"], [data-view="settings"]').forEach((item) => {
     item.hidden = true;
+    item.style.display = "none";
   });
   lockSelectToSource(topSourceFilter);
   lockSelectToSource(cashSourceFilter);
