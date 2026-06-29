@@ -606,16 +606,17 @@ function renderSourceMetrics(services, cashItems, cashBalanceItems) {
       </article>
     `;
   }).join("");
-  const cashCard = `
+  const cashCard = isSourcePortal() ? `
+    <article>
+      <span>Kalan Ödeme</span>
+      <b>${money(cashRemainingBalance(cashBalanceItems))}</b>
+    </article>
+  ` : `
     <article>
       <span>Kasa Durumu</span>
       <b>${money(customerCashBalance(cashBalanceItems))}</b>
-      ${isSourcePortal() ? "" : `<small>Milat: ${formatDate(isoToday)}</small>`}
+      <small>Milat: ${formatDate(isoToday)}</small>
     </article>
-    ${isSourcePortal() ? `<article>
-      <span>Kalan Ödeme</span>
-      <b>${money(cashRemainingBalance(cashBalanceItems))}</b>
-    </article>` : ""}
   `;
   const emptySourceMessage = isSourcePortal() ? "" : `<p class="empty">Servis kaynağı bulunamadı.</p>`;
   document.querySelector("#sourceMetrics").innerHTML = `${sourceCards || emptySourceMessage}${cashCard}`;
