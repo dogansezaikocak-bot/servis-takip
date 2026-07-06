@@ -1,14 +1,8 @@
-# Ekzen Servis Takip
+# Ekzen Planfix V3.3.1
 
-Statik servis takip uygulamasi.
-
-## GitHub Pages
-
-Bu klasor GitHub Pages ile dogrudan yayinlanabilir:
-
-- `index.html`
-- `styles.css`
-- `app.js`
-- `.nojekyll`
-
-Not: Bu surum verileri tarayicinin yerel hafizasinda saklar. Farkli cihazlar ayni kayitlari otomatik paylasmaz.
+Mobil teknisyen paneli ayrı arayüz olarak düzenlendi.
+- Masaüstü mobilde gizlenir.
+- Kalan İş / Biten İş üstte iki büyük buton olarak görünür.
+- Şikayet etiketi kaldırıldı, sadece şikayet metni görünür.
+- Ertele / Fişi Kapat servis detayının içinde kalır.
+- Ana mobil ekranda sadece Yeni Fiş Aç butonu bulunur.

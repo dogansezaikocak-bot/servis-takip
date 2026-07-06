@@ -66,6 +66,8 @@ const detailDialog = document.querySelector("#detailDialog");
 const detailBody = document.querySelector("#detailBody");
 const cashForm = document.querySelector("#cashForm");
 const cashDialog = document.querySelector("#cashDialog");
+const completeForm = document.querySelector("#completeForm");
+const completeDialog = document.querySelector("#completeDialog");
 const statusForm = document.querySelector("#statusForm");
 const statusDialog = document.querySelector("#statusDialog");
 const noteForm = document.querySelector("#noteForm");
@@ -141,14 +143,16 @@ function migrateState(oldState) {
       cashCounters: normalizeCashCounters(oldState.settings?.cashCounters),
       sources: ensureValues(sourceNames.length ? sourceNames : [...sources], ["Korkmaz Teknik", "Sedef Teknik", "Kendi İşim"]),
       cities: uniqueValues(oldState.settings?.cities || cities),
+      sourcePhones: { ...(oldState.settings?.sourcePhones || {}) },
     },
     cash: oldState.cash || [],
     services: oldState.services || [],
   };
 
-  migrated.services = migrated.services.map((service) => ({
+  migrated.services = migrated.services.map((service, index) => ({
     ...service,
     status: service.status || "Yeni Kayıt",
+    sortOrder: Number.isFinite(Number(service.sortOrder)) ? Number(service.sortOrder) : index,
     technician: service.technician || "",
     notes: normalizeNotes(service.notes),
     photos: normalizePhotos(service.photos),
@@ -163,6 +167,7 @@ function migrateState(oldState) {
     source: item.source || "",
     materialCost: Number(item.materialCost) || 0,
     commission50: Boolean(item.commission50),
+    commissionRate: item.commissionRate !== undefined ? Number(item.commissionRate) : (item.commission50 ? 50 : 0),
     parentCashId: item.parentCashId || "",
     amount: Number(item.amount) || 0,
   }));
@@ -220,6 +225,7 @@ function normalizeStatusHistory(service) {
     id: uid(),
     date: toIsoDate(new Date(service.createdAt || new Date())),
     status: service.status || "Yeni Kayıt",
+    sortOrder: Number.isFinite(Number(service.sortOrder)) ? Number(service.sortOrder) : index,
     technician: service.technician || "",
     description: "İlk kayıt",
     createdAt: service.createdAt || new Date().toISOString(),
@@ -364,9 +370,15 @@ function bindEvents() {
     const jump = event.target.closest("[data-view-jump]")?.dataset.viewJump;
     const serviceRow = event.target.closest("[data-service-id]");
 
-    if (view) switchView(view);
+    if (view) {
+      if (view === "services") prepareTodayServiceList();
+      switchView(view);
+    }
     if (jump) switchView(jump);
-    if (serviceRow && !event.target.closest("button") && !event.target.matches("input")) openDetail(serviceRow.dataset.serviceId);
+    if (serviceRow && !event.target.closest("button, a") && !event.target.matches("input")) openDetail(serviceRow.dataset.serviceId);
+    if (action === "toggle-source-menu") toggleTopSourceMenu();
+    if (action === "quick-source-filter") applyTopSourceFilter(button.dataset.source);
+    if (action === "clear-top-source-filter") applyTopSourceFilter("");
     if (!action) return;
     if (isSourcePortal() && [
       "add-source", "edit-source", "delete-source", "add-setting-item", "edit-setting-item", "delete-setting-item", "move-setting-item", "export-backup", "choose-backup",
@@ -376,10 +388,12 @@ function bindEvents() {
     if (action === "toggle-nav") document.body.classList.toggle("nav-open");
     if (action === "open-service-modal") openServiceForm();
     if (action === "open-service-detail") openDetail(button.dataset.serviceId);
+    if (action === "move-service-order") moveServiceOrder(button.dataset.serviceId, button.dataset.direction);
     if (action === "open-related-service") openRelatedServiceForm(button.dataset.serviceId);
     if (action === "close-service-modal") serviceDialog.close();
     if (action === "close-detail-modal") detailDialog.close();
     if (action === "close-cash-modal") cashDialog.close();
+    if (action === "close-complete-modal") completeDialog.close();
     if (action === "close-status-modal") statusDialog.close();
     if (action === "close-note-modal") noteDialog.close();
     if (action === "close-source-modal") sourceDialog.close();
@@ -389,11 +403,13 @@ function bindEvents() {
     if (action === "print-cash") printCash();
     if (action === "dashboard-stat") applyDashboardStatFilter(button.dataset.stat);
     if (action === "dashboard-source") applyDashboardSourceFilter(button.dataset.source);
+    if (action === "show-open-services") showOpenServicesFromTopbar();
     if (action === "clear-selected") clearServiceSelection();
     if (action === "add-cash") openCashForm(button.dataset.serviceId ? { serviceId: button.dataset.serviceId } : {});
     if (action === "edit-cash") openCashForm({ id: button.dataset.cashId });
     if (action === "delete-cash") deleteCash(button.dataset.cashId);
     if (action === "change-status") openStatusForm(button.dataset.serviceId);
+    if (action === "complete-service") openCompleteForm(button.dataset.serviceId);
     if (action === "add-note") openNoteForm(button.dataset.serviceId);
     if (action === "edit-note") openNoteForm(button.dataset.serviceId, button.dataset.noteId);
     if (action === "delete-note") deleteNote(button.dataset.serviceId, button.dataset.noteId);
@@ -434,6 +450,11 @@ function bindEvents() {
     activeDashboardSource = "";
     renderServices();
   });
+  document.querySelector("#serviceDateFilter")?.addEventListener("change", () => {
+    activeDashboardStat = "";
+    activeDashboardSource = "";
+    renderServices();
+  });
   cashSourceFilter.addEventListener("change", renderCash);
   cashStartDate.addEventListener("change", renderCash);
   cashEndDate.addEventListener("change", renderCash);
@@ -449,6 +470,11 @@ function bindEvents() {
   cashForm.addEventListener("submit", (event) => {
     event.preventDefault();
     saveCash(new FormData(cashForm));
+  });
+
+  completeForm?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    completeServiceFromForm(new FormData(completeForm));
   });
 
   statusForm.addEventListener("submit", (event) => {
@@ -489,6 +515,7 @@ function fillSelects() {
   fillSelect(serviceForm.elements.source, settingsList("sources"));
   fillSelect(serviceForm.elements.status, settingsList("statuses"));
   fillSelect(cashForm.elements.source, ["Servis Kaynağı", ...settingsList("sources")]);
+  fillSelect(completeForm?.elements.source, ["Servis Kaynağı", ...settingsList("sources")]);
   fillSelect(statusForm.elements.status, settingsList("statuses"));
 }
 
@@ -538,10 +565,37 @@ function setDefaultDates() {
   cashEndDate.value = "";
 }
 
+function prepareTodayServiceList() {
+  activeDashboardStat = "";
+  activeDashboardSource = "";
+  filterForm?.reset();
+  if (topSourceFilter) topSourceFilter.value = isSourcePortal() ? portalSourceName() : "";
+  if (topStatusFilter) topStatusFilter.value = "";
+  const serviceDateFilter = document.querySelector("#serviceDateFilter");
+  if (serviceDateFilter) serviceDateFilter.value = isoToday;
+}
+
+function showOpenServicesFromTopbar() {
+  activeDashboardStat = "Kalan İşler";
+  activeDashboardSource = "";
+  filterForm?.reset();
+  if (topSourceFilter) topSourceFilter.value = isSourcePortal() ? portalSourceName() : "";
+  if (topStatusFilter) topStatusFilter.value = "";
+  const serviceDateFilter = document.querySelector("#serviceDateFilter");
+  if (serviceDateFilter) serviceDateFilter.value = isoToday;
+  switchView("services");
+  document.querySelectorAll(".nav-item").forEach((item) => item.classList.toggle("is-active", item.dataset.action === "show-open-services"));
+}
+
 function switchView(view) {
   if (isSourcePortal() && !["dashboard", "cash", "services"].includes(view)) view = "dashboard";
   currentView = view;
-  Object.entries(views).forEach(([key, element]) => element.classList.toggle("is-visible", key === view));
+  Object.entries(views).forEach(([key, element]) => {
+    const visible = key === view;
+    element.classList.toggle("is-visible", visible);
+    element.hidden = !visible;
+    element.style.display = visible ? "block" : "none";
+  });
   document.querySelectorAll(".nav-item").forEach((item) => item.classList.toggle("is-active", item.dataset.view === view));
   const subtitles = {
     dashboard: "Servis takip paneli",
@@ -561,6 +615,7 @@ function render() {
   fillSelects();
   applySourcePortalMode();
   renderDashboard();
+  renderTopSourceMenu();
   renderServices();
   renderCustomers();
   renderSources();
@@ -594,42 +649,118 @@ function renderDashboard() {
 }
 
 function renderSourceMetrics(services, cashItems, cashBalanceItems) {
-  const sourceList = isSourcePortal() ? [] : settingsList("sources");
-  const sourceCards = sourceList.map((source) => {
-    const sourceCashItems = cashItems.filter((item) => cashItemSource(item) === source);
-    const remainingTotal = cashRemainingBalance(sourceCashItems);
-    return `
-      <article class="metric-card is-clickable" data-action="dashboard-source" data-source="${escapeAttr(source)}">
-        <span>${escapeHtml(source)}</span>
-        <b>${services.filter((service) => service.source === source && isOpenDashboardSourceStatus(service.status)).length}</b>
-        <small class="metric-subtotal">Kalan Ödeme: ${money(remainingTotal)}</small>
+  const totals = cashBreakdown(cashItems);
+  const isSourceFiltered = Boolean(activeDashboardSource);
+
+  if (isSourceFiltered) {
+    document.querySelector("#sourceMetrics").innerHTML = `
+      <article class="metric-card finance-card income-card">
+        <span>Toplam Kazanç</span>
+        <b>${money(totals.commission)}</b>
+      </article>
+      <article class="metric-card finance-card expense-card">
+        <span>Yapılan Ödeme</span>
+        <b>${money(totals.manualExpense)}</b>
+      </article>
+      <article class="metric-card finance-card cash-status-card">
+        <span>Kalan Ödeme</span>
+        <b>${money(totals.commission - totals.manualExpense)}</b>
       </article>
     `;
-  }).join("");
-  const cashCard = isSourcePortal() ? `
-    <article>
-      <span>Kalan Ödeme</span>
-      <b>${money(cashRemainingBalance(cashBalanceItems))}</b>
+    return;
+  }
+
+  document.querySelector("#sourceMetrics").innerHTML = `
+    <article class="metric-card finance-card income-card">
+      <span>Toplam Gelirler</span>
+      <b>${money(totals.income)}</b>
     </article>
-  ` : `
-    <article>
+    <article class="metric-card finance-card commission-card">
+      <span>Komisyon</span>
+      <b>${money(totals.commission)}</b>
+    </article>
+    <article class="metric-card finance-card material-card">
+      <span>Malzeme</span>
+      <b>${money(totals.material)}</b>
+    </article>
+    <article class="metric-card finance-card cash-status-card">
       <span>Kasa Durumu</span>
-      <b>${money(customerCashBalance(cashBalanceItems))}</b>
-      <small>Milat: ${formatDate(isoToday)}</small>
+      <b>${money(dashboardOwnerCashStatus(cashItems))}</b>
     </article>
   `;
-  const emptySourceMessage = isSourcePortal() ? "" : `<p class="empty">Servis kaynağı bulunamadı.</p>`;
-  document.querySelector("#sourceMetrics").innerHTML = `${sourceCards || emptySourceMessage}${cashCard}`;
+}
+
+function renderTopSourceMenu() {
+  const list = document.querySelector("#topSourceMenuList");
+  const panel = document.querySelector("#topSourceMenu");
+  const menuButton = document.querySelector(".source-menu-button");
+  if (!list || !panel) return;
+  if (isSourcePortal()) {
+    panel.hidden = true;
+    return;
+  }
+  panel.hidden = false;
+  if (menuButton) {
+    menuButton.textContent = activeDashboardSource || "Kaynaklar";
+    menuButton.classList.toggle("is-filtered", Boolean(activeDashboardSource));
+  }
+  const sourceList = settingsList("sources");
+  const rows = sourceList.map((source) => {
+    const phone = sourcePhone(source);
+    return `
+      <button class="source-menu-row" type="button" data-action="quick-source-filter" data-source="${escapeAttr(source)}">
+        <span>
+          <b>${escapeHtml(source)}</b>
+          ${phone ? `<small>${escapeHtml(phone)}</small>` : ""}
+        </span>
+      </button>
+    `;
+  }).join("");
+  list.innerHTML = `
+    ${rows || `<p class="empty">Servis kaynağı yok.</p>`}
+    <button class="source-menu-row source-menu-all" type="button" data-action="clear-top-source-filter" data-source="">
+      <span><b>Tüm Kaynaklar</b></span>
+    </button>
+  `;
+}
+
+function toggleTopSourceMenu() {
+  const panel = document.querySelector("#topSourceMenuPanel");
+  if (!panel) return;
+  panel.hidden = !panel.hidden;
+}
+
+function applyTopSourceFilter(source) {
+  activeDashboardSource = source || "";
+  activeDashboardStat = "";
+  if (topSourceFilter) topSourceFilter.value = source || "";
+  if (cashSourceFilter) cashSourceFilter.value = source || "";
+  renderTopSourceMenu();
+  renderDashboard();
+  renderServices();
+  renderCash();
+  const panel = document.querySelector("#topSourceMenuPanel");
+  if (panel) panel.hidden = true;
 }
 
 function renderDashboardCounters(services) {
   const counters = settingsList("dashboardCounters");
   document.querySelector("#dashboardCounters").innerHTML = counters.length ? counters.map((label) => `
-    <article class="stat-box is-clickable" data-action="dashboard-stat" data-stat="${escapeAttr(label)}">
+    <article class="stat-box is-clickable ${dashboardCounterClass(label)}" data-action="dashboard-stat" data-stat="${escapeAttr(label)}">
       <span>${escapeHtml(label)}</span>
       <b>${dashboardCounterCount(label, services)}</b>
     </article>
   `).join("") : `<p class="empty">Sayaç bulunamadı.</p>`;
+}
+
+function dashboardCounterClass(label) {
+  if (isStatus(label, "Bugün")) return "stat-today";
+  if (isStatus(label, "Yarın")) return "stat-tomorrow";
+  if (isStatus(label, "Açık Fişler")) return "stat-open";
+  if (isStatus(label, "İşlem Tamam")) return "stat-complete";
+  if (isStatus(label, "Yeni Kayıt")) return "stat-new";
+  if (isStatus(label, "İşlemde")) return "stat-process";
+  return "stat-neutral";
 }
 
 function dashboardCounterCount(label, services) {
@@ -638,13 +769,10 @@ function dashboardCounterCount(label, services) {
 
 function renderServices() {
   let services = sortServices(filteredServices());
-  document.querySelector("#serviceList").innerHTML = `
-    <div class="service-header">
-      <span></span><span>Tarih</span><span>Müşteri</span><span>Cihaz</span><span>Durum</span>
-    </div>
-    ${services.map(serviceRow).join("")}
-  `;
-  document.querySelector("#resultCount").textContent = `Toplam Sonuç Sayısı : ${services.length}`;
+  document.querySelector("#serviceList").innerHTML = services.length
+    ? services.map(serviceRow).join("")
+    : `<p class="empty">Servis kaydı bulunamadı.</p>`;
+  document.querySelector("#resultCount").textContent = `Toplam ${services.length} kayıt`;
 }
 
 function filteredServices() {
@@ -672,9 +800,11 @@ function filteredServices() {
     ].join(" "));
     const sourceFilter = topSourceFilter.value;
     const statusFilter = topStatusFilter.value;
+    const dateFilter = document.querySelector("#serviceDateFilter")?.value || "";
     return matchesPortalSource(service.source)
       && (!query || query.split(" ").every((word) => queryText.includes(word)))
       && (!statusFilter || service.status === statusFilter)
+      && (!dateFilter || serviceHasDate(service, dateFilter))
       && (!sourceFilter || service.source === sourceFilter)
       && (!activeDashboardSource || (service.source === activeDashboardSource && isOpenDashboardSourceStatus(service.status)))
       && matchesDashboardStat(service);
@@ -707,6 +837,8 @@ function clearServiceSelection() {
   filterForm.reset();
   topSourceFilter.value = "";
   topStatusFilter.value = "";
+  const serviceDateFilter = document.querySelector("#serviceDateFilter");
+  if (serviceDateFilter) serviceDateFilter.value = "";
   document.querySelectorAll(".service-check").forEach((input) => { input.checked = false; });
   renderServices();
 }
@@ -720,6 +852,7 @@ function matchesDashboardCounter(service, label) {
   if (isStatus(label, "Bugün")) return serviceHasDate(service, isoToday) && isActiveDashboardDateStatus(service.status);
   if (isStatus(label, "Yarın")) return serviceHasDate(service, toIsoDate(tomorrow)) && isActiveDashboardDateStatus(service.status);
   if (isStatus(label, "Açık Fişler")) return !isStatus(service.status, "İşlem Tamam") && !isStatus(service.status, "İptal");
+  if (isStatus(label, "Kalan İşler")) return isStatus(service.status, "Yeni Kayıt") || isStatus(service.status, "İşlemde");
   if (isStatus(label, "Toplam Servis")) return true;
   return isStatus(service.status, label);
 }
@@ -733,23 +866,67 @@ function isOpenDashboardSourceStatus(status) {
 }
 
 function sortServices(services) {
-  const sorted = [...services];
-  const sort = sortSelect?.value || "dateDesc";
-  if (sort === "dateDesc") sorted.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  if (sort === "customerAsc") sorted.sort((a, b) => a.customerName.localeCompare(b.customerName, "tr"));
-  if (sort === "brandAsc") sorted.sort((a, b) => a.brand.localeCompare(b.brand, "tr"));
-  if (sort === "statusAsc") sorted.sort((a, b) => a.status.localeCompare(b.status, "tr"));
-  return sorted;
+  return [...services].sort((a, b) => {
+    const orderA = Number.isFinite(Number(a.sortOrder)) ? Number(a.sortOrder) : 999999;
+    const orderB = Number.isFinite(Number(b.sortOrder)) ? Number(b.sortOrder) : 999999;
+    if (orderA !== orderB) return orderA - orderB;
+    return String(b.createdAt || "").localeCompare(String(a.createdAt || ""));
+  });
+}
+
+function normalizeServiceOrder() {
+  const sorted = sortServices(state.services);
+  sorted.forEach((service, index) => { service.sortOrder = index; });
+}
+
+function moveServiceOrder(serviceId, direction) {
+  const visible = sortServices(filteredServices());
+  const currentIndex = visible.findIndex((service) => service.id === serviceId);
+  if (currentIndex < 0) return;
+  const targetIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
+  if (targetIndex < 0 || targetIndex >= visible.length) return;
+  normalizeServiceOrder();
+  const current = state.services.find((service) => service.id === visible[currentIndex].id);
+  const target = state.services.find((service) => service.id === visible[targetIndex].id);
+  if (!current || !target) return;
+  const oldOrder = current.sortOrder;
+  current.sortOrder = target.sortOrder;
+  target.sortOrder = oldOrder;
+  saveState();
+  renderServices();
 }
 
 function serviceRow(service) {
+  const dateValue = service.availableDate || service.visitDate || service.createdAt?.slice(0, 10) || "";
+  const timeValue = service.availableTime || service.createdAt?.slice(11, 16) || "Saat yok";
+  const phoneClean = String(service.phone || "").replace(/\D/g, "");
+  const phoneHref = phoneClean ? `tel:${phoneClean}` : "#";
   return `
-    <article class="service-row" data-service-id="${service.id}">
-      <input class="service-check" type="checkbox" aria-label="Servis seç">
-      <div><p class="service-no">${service.id}</p><p>${formatDate(service.availableDate)}</p></div>
-      <div><p><b>${escapeHtml(service.customerName)}</b></p><p>${escapeHtml(service.phone)}</p><p>${escapeHtml(service.address)}</p></div>
-      <div><p><b>${escapeHtml(service.brand)} - ${escapeHtml(service.device)}</b></p><p>${escapeHtml(service.model)}</p><p><i>${escapeHtml(service.fault)}</i></p></div>
-      <div><span class="status-pill ${statusClass(service.status)}">${escapeHtml(service.status)}</span><p>Kaynak: ${escapeHtml(service.source || "-")}</p><p>Müsait: ${formatDate(service.availableDate)}</p></div>
+    <article class="service-row service-card-row service-card-${serviceCardTheme(service.status)}" data-service-id="${service.id}">
+      <div class="service-date-block">
+        <span class="service-date-main">${escapeHtml(formatServiceCardDate(dateValue))}</span>
+        <span class="service-time-main">${escapeHtml(timeValue)}</span>
+        <span class="service-day-main">${escapeHtml(formatServiceCardDay(dateValue))}</span>
+        <span class="service-source-main">${escapeHtml(service.source || "Kaynak yok")}</span>
+      </div>
+      <div class="service-customer-block">
+        <p class="service-customer-name">${escapeHtml(service.customerName || "İsimsiz Müşteri")}</p>
+        <p class="service-address-line">${escapeHtml(service.address || "Adres girilmedi")}</p>
+        <p class="service-phone-line"><a href="${phoneHref}">${escapeHtml(service.phone || "Telefon yok")}</a></p>
+      </div>
+      <div class="service-device-block">
+        <p class="service-device-title">${escapeHtml([service.brand, service.device].filter(Boolean).join(" | ") || "Cihaz bilgisi yok")}</p>
+        <p class="service-model-line">${escapeHtml(service.model || "Model bilgisi yok")}</p>
+      </div>
+      <div class="service-status-block">
+        <span class="status-pill ${statusClass(service.status)}">${escapeHtml(service.status || "Durum yok")}</span>
+        <p class="service-fault-title">Şikayet:</p>
+        <p class="service-fault-text">${escapeHtml(service.fault || "Şikayet yazılmadı")}</p>
+      </div>
+      <div class="service-order-controls" aria-label="Sıralama">
+        <button class="service-order-button" type="button" data-action="move-service-order" data-service-id="${service.id}" data-direction="up" title="Yukarı taşı">↑</button>
+        <button class="service-order-button" type="button" data-action="move-service-order" data-service-id="${service.id}" data-direction="down" title="Aşağı taşı">↓</button>
+      </div>
     </article>
   `;
 }
@@ -924,14 +1101,15 @@ function filteredCash() {
   const end = cashEndDate.value;
   return state.cash.filter((item) => {
     const date = item.date || "";
-    return (!source || cashItemSource(item) === source)
+    return cashIsPosted(item)
+      && (!source || cashItemSource(item) === source)
       && (!start || date >= start)
       && (!end || date <= end);
   });
 }
 
 function cashTotals(items = state.cash) {
-  return items.reduce((totals, item) => {
+  return postedCashItems(items).reduce((totals, item) => {
     if (item.type === "income") totals.income += Number(item.amount) || 0;
     if (item.type === "expense") totals.expense += Number(item.amount) || 0;
     totals.balance = totals.income - totals.expense;
@@ -946,13 +1124,18 @@ function cashRemainingBalance(items = state.cash) {
 function filteredDashboardServices() {
   const start = dashboardStartDate.value;
   const end = dashboardEndDate.value;
-  return state.services.filter((service) => matchesPortalSource(service.source) && dateInRange(serviceMainDate(service), start, end));
+  return state.services.filter((service) => matchesPortalSource(service.source)
+    && (!activeDashboardSource || service.source === activeDashboardSource)
+    && dateInRange(serviceMainDate(service), start, end));
 }
 
 function filteredDashboardCash() {
   const start = dashboardStartDate.value;
   const end = dashboardEndDate.value;
-  return state.cash.filter((item) => matchesPortalSource(cashItemSource(item)) && dateInRange(item.date || "", start, end));
+  return state.cash.filter((item) => cashIsPosted(item)
+    && matchesPortalSource(cashItemSource(item))
+    && (!activeDashboardSource || cashItemSource(item) === activeDashboardSource)
+    && dateInRange(item.date || "", start, end));
 }
 
 function filteredDashboardCashForBalance() {
@@ -961,7 +1144,10 @@ function filteredDashboardCashForBalance() {
   if (isSourcePortal()) return filteredDashboardCash();
   if (start || end) return filteredDashboardCash();
   const week = currentWeekRange();
-  return state.cash.filter((item) => matchesPortalSource(cashItemSource(item)) && dateInRange(item.date || "", week.start, week.end));
+  return state.cash.filter((item) => cashIsPosted(item)
+    && matchesPortalSource(cashItemSource(item))
+    && (!activeDashboardSource || cashItemSource(item) === activeDashboardSource)
+    && dateInRange(item.date || "", week.start, week.end));
 }
 
 function currentWeekRange() {
@@ -978,7 +1164,7 @@ function dateInRange(date, start, end) {
 }
 
 function cashBreakdown(items = state.cash) {
-  return items.reduce((totals, item) => {
+  return postedCashItems(items).reduce((totals, item) => {
     const amount = Number(item.amount) || 0;
     if (item.type === "income") totals.income += amount;
     else if (item.autoCommissionExpense) totals.commission += amount;
@@ -987,6 +1173,16 @@ function cashBreakdown(items = state.cash) {
     totals.balance = totals.income - totals.manualExpense - totals.commission - totals.material;
     return totals;
   }, { income: 0, manualExpense: 0, commission: 0, material: 0, balance: 0 });
+}
+
+function dashboardOwnerCashStatus(items = state.cash) {
+  return postedCashItems(items).reduce((total, item) => {
+    const amount = Number(item.amount) || 0;
+    const source = cashItemSource(item);
+    if (item.type === "income" && isOwnWorkSource(source)) return total + amount;
+    if (item.autoCommissionExpense && !isOwnWorkSource(source)) return total + amount;
+    return total;
+  }, 0);
 }
 
 function customerCashBalance(items = state.cash) {
@@ -1090,6 +1286,7 @@ function saveService(formData) {
     createdAt: previous?.createdAt || new Date().toISOString(),
     status,
     price: previous?.price || 0,
+    sortOrder: previous?.sortOrder ?? (state.services.reduce((min, item) => Math.min(min, Number.isFinite(Number(item.sortOrder)) ? Number(item.sortOrder) : 0), 0) - 1),
     notes: previous?.notes || [],
     photos: previous?.photos || [],
     statusHistory: previous?.statusHistory || [{
@@ -1137,93 +1334,117 @@ function renderDetail(id) {
   if (!service || !matchesPortalSource(service.source)) return;
   document.querySelector("#detailTitle").textContent = `Servis Detay (${service.id})`;
   const linkedCash = state.cash.filter((item) => item.serviceId === service.id);
+  const cleanPhone = digits(service.phone);
+  const addressText = [service.city, service.district, service.address].filter(Boolean).join(" ");
+  const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addressText)}`;
+  const whatsappUrl = cleanPhone ? `https://wa.me/9${cleanPhone}` : "#";
+  const serviceTotal = linkedCash.filter((item) => item.type === "income").reduce((total, item) => total + (Number(item.amount) || 0), 0);
+  const serviceExpense = linkedCash.filter((item) => item.type === "expense").reduce((total, item) => total + (Number(item.amount) || 0), 0);
+  const serviceBalance = serviceTotal - serviceExpense;
+
   detailBody.innerHTML = `
-    <div class="detail-grid">
-      <section class="detail-section">
-        <h3>Müşteri Bilgisi ${canEditPortalRecords() ? `<button class="mini-button" type="button" data-edit-service="${service.id}">✎</button>` : ""}</h3>
-        <dl>
-          <dt>Müşteri Adı</dt><dd>${escapeHtml(service.customerName)}</dd>
-          <dt>Telefon</dt><dd><a href="tel:${digits(service.phone)}">${escapeHtml(service.phone)}</a></dd>
-          <dt>Adres</dt><dd>${escapeHtml(service.address || "-")}</dd>
-          <dt>Müsait Zaman</dt><dd>${formatDate(service.availableDate)} - ${escapeHtml(service.availableTime || "-")}</dd>
-          <dt>Operatör Notu</dt><dd>${escapeHtml(service.operatorNote || "-")}</dd>
-        </dl>
-      </section>
-      <section class="detail-section">
-        <h3>Cihaz Bilgisi ${canEditPortalRecords() ? `<button class="mini-button" type="button" data-edit-service="${service.id}">✎</button>` : ""}</h3>
-        <dl>
-          <dt>Cihaz</dt><dd>${escapeHtml(service.brand)} / ${escapeHtml(service.device)}</dd>
-          <dt>Model</dt><dd>${escapeHtml(service.model || "-")}</dd>
-          <dt>Cihaz Arızası</dt><dd>${escapeHtml(service.fault)}</dd>
-          <dt>Garanti Bitiş</dt><dd>${formatDate(service.warrantyEnd)}</dd>
-        </dl>
-      </section>
-      <section class="detail-section wide">
-        <h3>Servis Durumu ${canEditPortalRecords() ? `<button class="primary-button" type="button" data-action="change-status" data-service-id="${service.id}">Durum Değiştir</button>` : ""}</h3>
-        <dl>
-          <dt>Durum</dt><dd><span class="status-pill ${statusClass(service.status)}">${escapeHtml(service.status)}</span></dd>
-          <dt>Kaynak</dt><dd>${escapeHtml(service.source)}</dd>
-          <dt>Müsait Tarih</dt><dd>${formatDate(service.availableDate)}</dd>
-        </dl>
-      </section>
-      <section class="detail-section wide">
-        <h3>Serviste Yapılan İşlemler</h3>
-        <div class="history-list">
-          ${service.statusHistory.map((item) => `
-            <div class="history-item">
-              <div><b>${formatDate(item.date)} · ${escapeHtml(item.status)}</b><p>${escapeHtml(item.description || "-")}</p></div>
-            </div>
-          `).join("")}
+    <div class="service-drawer-layout v232-detail-layout">
+      <section class="service-drawer-main">
+        <div class="drawer-summary-card v232-summary-card">
+          <div>
+            <span class="drawer-eyebrow">Servis No ${escapeHtml(service.id)}</span>
+            <h3>${escapeHtml(service.customerName || "Müşteri")}</h3>
+            <p>${escapeHtml(service.brand)} ${escapeHtml(service.device)} · ${escapeHtml(service.fault || "Arıza bilgisi yok")}</p>
+          </div>
+          <span class="status-pill ${statusClass(service.status)}">${escapeHtml(service.status)}</span>
         </div>
-      </section>
-      <section class="detail-section">
-        <h3>Para Hareketleri ${canEditPortalRecords() ? `<button class="primary-button" type="button" data-action="add-cash" data-service-id="${service.id}">Para Ekle</button>` : ""}</h3>
-        <div class="history-list">
-          ${linkedCash.map((item) => `
-            <div class="history-item">
-              <div><b>${escapeHtml(visibleCashTitle(item))}</b><p>${formatDate(item.date)} · ${item.type === "expense" ? "Gider" : "Tahsilat"} · ${money(item.amount)}</p></div>
-              ${canEditPortalRecords() ? `<div class="row-actions">
-                <button class="mini-button" type="button" data-action="edit-cash" data-cash-id="${item.id}">✎</button>
-                <button class="mini-button danger" type="button" data-action="delete-cash" data-cash-id="${item.id}">×</button>
-              </div>` : ""}
-            </div>
-          `).join("") || `<p class="empty">Henüz para hareketi yok.</p>`}
+
+        <div class="v232-primary-grid">
+          <section class="detail-section v232-card v232-customer-card">
+            <h3>👤 Müşteri Bilgileri ${canEditPortalRecords() ? `<button class="mini-button" type="button" data-edit-service="${service.id}">✎</button>` : ""}</h3>
+            <dl>
+              <dt>Müşteri</dt><dd>${escapeHtml(service.customerName || "-")}</dd>
+              <dt>Telefon</dt><dd>${escapeHtml(service.phone || "-")}</dd>
+              <dt>Adres</dt><dd>${escapeHtml(service.address || "-")}</dd>
+              <dt>Müsait Zaman</dt><dd>${formatDate(service.availableDate)} - ${escapeHtml(service.availableTime || "-")}</dd>
+            </dl>
+          </section>
+
+          <section class="detail-section v232-card v232-device-card">
+            <h3>🔧 Cihaz Bilgileri ${canEditPortalRecords() ? `<button class="mini-button" type="button" data-edit-service="${service.id}">✎</button>` : ""}</h3>
+            <dl>
+              <dt>Marka</dt><dd>${escapeHtml(service.brand || "-")}</dd>
+              <dt>Cihaz</dt><dd>${escapeHtml(service.device || "-")}</dd>
+              <dt>Model</dt><dd>${escapeHtml(service.model || "-")}</dd>
+              <dt>Garanti Bitiş</dt><dd>${formatDate(service.warrantyEnd)}</dd>
+              <dt>Şikayet</dt><dd class="v232-fault-text">${escapeHtml(service.fault || "-")}</dd>
+            </dl>
+          </section>
         </div>
-      </section>
-      <section class="detail-section">
-        <h3>Servis Notları ${canEditPortalRecords() ? `<button class="primary-button" type="button" data-action="add-note" data-service-id="${service.id}">Not Ekle</button>` : ""}</h3>
-        <div class="history-list">
-          ${service.notes.map((note) => `
-            <div class="history-item">
-              <div><b>${formatDateTime(note.createdAt)}</b><p>${escapeHtml(note.text)}</p></div>
-              ${canEditPortalRecords() ? `<div class="row-actions">
-                <button class="mini-button" type="button" data-action="edit-note" data-service-id="${service.id}" data-note-id="${note.id}">✎</button>
-                <button class="mini-button danger" type="button" data-action="delete-note" data-service-id="${service.id}" data-note-id="${note.id}">×</button>
-              </div>` : ""}
+
+        <section class="detail-section wide v232-card v232-finance-card">
+          <h3>💰 Finans ${canEditPortalRecords() ? `<button class="primary-button" type="button" data-action="add-cash" data-service-id="${service.id}">Para Ekle</button>` : ""}</h3>
+          <div class="drawer-money-strip v232-money-strip">
+            <article><span>Tahsilat</span><b>${money(serviceTotal)}</b></article>
+            <article><span>Gider</span><b>${money(serviceExpense)}</b></article>
+            <article><span>Kalan</span><b>${money(serviceBalance)}</b></article>
+          </div>
+          <div class="history-list v232-history-list">
+            ${linkedCash.map((item) => `
+              <div class="history-item">
+                <div><b>${escapeHtml(visibleCashTitle(item))}</b><p>${formatDate(item.date)} · ${item.type === "expense" ? "Gider" : "Tahsilat"} · ${money(item.amount)}</p></div>
+                ${canEditPortalRecords() ? `<div class="row-actions">
+                  <button class="mini-button" type="button" data-action="edit-cash" data-cash-id="${item.id}">✎</button>
+                  <button class="mini-button danger" type="button" data-action="delete-cash" data-cash-id="${item.id}">×</button>
+                </div>` : ""}
+              </div>
+            `).join("") || `<p class="empty">Henüz para hareketi yok.</p>`}
+          </div>
+        </section>
+
+        <div class="v232-secondary-grid">
+          <section class="detail-section v232-card">
+            <h3>📝 Yapılan İşlemler ${canEditPortalRecords() ? `<button class="primary-button" type="button" data-action="add-note" data-service-id="${service.id}">İşlem Ekle</button>` : ""}</h3>
+            <div class="history-list v232-history-list v239-work-list">
+              ${service.notes.map((note) => `
+                <div class="history-item v239-work-item">
+                  <div><b>${formatDateTime(note.createdAt)}</b><p>${escapeHtml(note.text)}</p></div>
+                  ${canEditPortalRecords() ? `<div class="row-actions">
+                    <button class="mini-button" type="button" data-action="edit-note" data-service-id="${service.id}" data-note-id="${note.id}">✎</button>
+                    <button class="mini-button danger" type="button" data-action="delete-note" data-service-id="${service.id}" data-note-id="${note.id}">×</button>
+                  </div>` : ""}
+                </div>
+              `).join("") || `<p class="empty">Yapılan işlem bulunamadı.</p>`}
             </div>
-          `).join("") || `<p class="empty">Not bulunamadı.</p>`}
+          </section>
         </div>
+
+        <section class="detail-section wide v232-card v232-photo-card">
+          <h3>📷 Fotoğraflar ${canEditPortalRecords() ? `<button class="primary-button" type="button" data-action="add-photo" data-service-id="${service.id}">Fotoğraf Ekle / Çek</button>` : ""}</h3>
+          ${service.photos.length ? `<div class="photo-grid">${service.photos.map((photo) => `
+            <article class="photo-card">
+              <img src="${photo.dataUrl}" alt="${escapeHtml(photo.caption || "Servis fotoğrafı")}">
+              <footer>
+                <b>${escapeHtml(photo.caption || "Fotoğraf")}</b>
+                ${canEditPortalRecords() ? `<div class="row-actions">
+                  <button class="mini-button" type="button" data-action="edit-photo" data-service-id="${service.id}" data-photo-id="${photo.id}">✎</button>
+                  <button class="mini-button danger" type="button" data-action="delete-photo" data-service-id="${service.id}" data-photo-id="${photo.id}">×</button>
+                </div>` : ""}
+              </footer>
+            </article>
+          `).join("")}</div>` : `<p class="empty">Fotoğraf bulunamadı.</p>`}
+        </section>
       </section>
-      <section class="detail-section wide">
-        <h3>Servis Fotoğrafları ${canEditPortalRecords() ? `<button class="primary-button" type="button" data-action="add-photo" data-service-id="${service.id}">Fotoğraf Ekle / Çek</button>` : ""}</h3>
-        ${service.photos.length ? `<div class="photo-grid">${service.photos.map((photo) => `
-          <article class="photo-card">
-            <img src="${photo.dataUrl}" alt="${escapeHtml(photo.caption || "Servis fotoğrafı")}">
-            <footer>
-              <b>${escapeHtml(photo.caption || "Fotoğraf")}</b>
-              ${canEditPortalRecords() ? `<div class="row-actions">
-                <button class="mini-button" type="button" data-action="edit-photo" data-service-id="${service.id}" data-photo-id="${photo.id}">✎</button>
-                <button class="mini-button danger" type="button" data-action="delete-photo" data-service-id="${service.id}" data-photo-id="${photo.id}">×</button>
-              </div>` : ""}
-            </footer>
-          </article>
-        `).join("")}</div>` : `<p class="empty">Fotoğraf bulunamadı.</p>`}
-      </section>
-    </div>
-    <div class="inline-actions" style="margin-top:12px">
-      ${canEditPortalRecords() ? `<button class="primary-button" type="button" data-edit-service="${service.id}">Servisi Güncelle</button>` : ""}
-      <button class="secondary-button" type="button" data-action="open-related-service" data-service-id="${service.id}">Yeni Servis Kaydı Aç</button>
-      <button class="secondary-button" type="button" data-print-service>Servis Fişi</button>
+
+      <aside class="service-action-rail v232-action-rail">
+        <h3>Hızlı İşlemler</h3>
+        <a class="drawer-action-button" href="tel:${cleanPhone}">Ara</a>
+        <a class="drawer-action-button" href="${whatsappUrl}" target="_blank" rel="noopener">WhatsApp</a>
+        <a class="drawer-action-button" href="${mapUrl}" target="_blank" rel="noopener">Yol Tarifi</a>
+        ${canEditPortalRecords() ? `<button class="drawer-action-button" type="button" data-action="change-status" data-service-id="${service.id}">Durum Değiştir</button>` : ""}
+        ${canEditPortalRecords() ? `<button class="drawer-action-button" type="button" data-action="add-cash" data-service-id="${service.id}">Tahsilat / Gider</button>` : ""}
+        ${canEditPortalRecords() ? `<button class="drawer-action-button" type="button" data-action="add-note" data-service-id="${service.id}">Not Ekle</button>` : ""}
+        ${canEditPortalRecords() ? `<button class="drawer-action-button" type="button" data-action="add-photo" data-service-id="${service.id}">Fotoğraf</button>` : ""}
+        ${canEditPortalRecords() ? `<button class="drawer-action-button primary" type="button" data-action="complete-service" data-service-id="${service.id}">Fişi Kapat</button>` : ""}
+        ${canEditPortalRecords() ? `<button class="drawer-action-button" type="button" data-edit-service="${service.id}">Servisi Güncelle</button>` : ""}
+        <button class="drawer-action-button" type="button" data-action="open-related-service" data-service-id="${service.id}">Tekrar Servis Aç</button>
+        <button class="drawer-action-button" type="button" data-print-service>Servis Fişi Yazdır</button>
+      </aside>
     </div>
   `;
 
@@ -1267,6 +1488,81 @@ function saveStatus(formData) {
   render();
 }
 
+function openCompleteForm(serviceId) {
+  if (isSourcePortal()) return;
+  const service = state.services.find((item) => item.id === serviceId);
+  if (!service || !matchesPortalSource(service.source)) return;
+  completeForm.reset();
+  completeForm.elements.serviceId.value = serviceId;
+  completeForm.elements.type.value = "income";
+  completeForm.elements.amount.value = service.price && Number(service.price) > 0 ? String(service.price) : "";
+  completeForm.elements.materialCost.value = "";
+  completeForm.elements.commissionRate.value = "50";
+  completeForm.elements.source.value = service.source || "";
+  completeForm.elements.workNote.value = "";
+  completeDialog.showModal();
+}
+
+function completeServiceFromForm(formData) {
+  if (isSourcePortal()) return;
+  const data = Object.fromEntries(formData);
+  const service = state.services.find((item) => item.id === data.serviceId);
+  if (!service || !matchesPortalSource(service.source)) return;
+
+  const workNote = String(data.workNote || "").trim();
+  const amountRaw = String(data.amount ?? "").trim();
+  if (!workNote) {
+    alert("Fişi kapatmak için yapılan işlemler alanı zorunludur.");
+    return;
+  }
+  if (amountRaw === "") {
+    alert("Fişi kapatmak için para bilgisi zorunludur. Ücretsiz işlemse 0 yaz.");
+    return;
+  }
+
+  const amount = Number(data.amount) || 0;
+  const materialCost = Number(data.materialCost) || 0;
+  const commissionRate = Number(data.commissionRate) || 0;
+  const cashType = data.type === "expense" ? "expense" : "income";
+  const closeDate = isoToday;
+
+  const cashItem = {
+    id: uid(),
+    date: closeDate,
+    type: cashType,
+    title: data.paymentMode || (cashType === "income" ? "Tahsilat" : "Gider"),
+    amount,
+    materialCost,
+    commission50: commissionRate > 0,
+    commissionRate,
+    source: data.source || service.source || "",
+    serviceId: service.id,
+  };
+  state.cash.unshift(cashItem);
+
+  service.status = "İşlem Tamam";
+  service.paymentStatus = amount > 0 && cashType === "income" ? "Ödendi" : (data.paymentMode || "Fiş Kapatıldı");
+  if (amount > 0) service.price = amount;
+  service.notes.unshift({
+    id: uid(),
+    text: workNote,
+    createdAt: new Date().toISOString(),
+    updatedAt: "",
+  });
+  service.statusHistory.unshift({
+    id: uid(),
+    date: closeDate,
+    status: "İşlem Tamam",
+    description: `${data.paymentMode || "Fiş kapatıldı"} - ${workNote}`,
+    createdAt: new Date().toISOString(),
+  });
+
+  syncSettlementCash(cashItem);
+  saveState();
+  completeDialog.close();
+  render();
+}
+
 function openCashForm(options = {}) {
   if (isSourcePortal()) return;
   cashForm.reset();
@@ -1287,8 +1583,7 @@ function openCashForm(options = {}) {
       if (key === "commission50") return;
       if (cashForm.elements[key]) cashForm.elements[key].value = value || "";
     });
-    cashForm.elements.commission50.value = "yes";
-    cashForm.elements.commission50.checked = Boolean(item.commission50);
+    if (cashForm.elements.commissionRate) cashForm.elements.commissionRate.value = String(item.commissionRate !== undefined ? Number(item.commissionRate) : (item.commission50 ? 50 : 0));
     deleteButton.dataset.cashId = options.id;
     deleteButton.style.visibility = "visible";
     document.querySelector("#cashDialogTitle").textContent = "Para Hareketini Düzenle";
@@ -1304,15 +1599,18 @@ function saveCash(formData) {
   if (isSourcePortal() && previous && !matchesPortalSource(cashItemSource(previous))) return;
   if (isSourcePortal() && serviceId && !matchesPortalSource(serviceSource(serviceId))) return;
   const materialCost = Number(data.materialCost) || 0;
+  const commissionRate = Number(data.commissionRate) || 0;
+  const cashType = data.type === "expense" ? "expense" : "income";
   const cashItem = {
     ...(previous || {}),
     id: data.id || uid(),
     date: data.date || isoToday,
-    type: data.type === "expense" ? "expense" : "income",
-    title: data.title.trim(),
+    type: cashType,
+    title: (data.title || "").trim() || (cashType === "income" ? "Tahsilat" : "Gider"),
     amount: Number(data.amount) || 0,
     materialCost,
-    commission50: Boolean(data.commission50),
+    commission50: commissionRate > 0,
+    commissionRate,
     source: isSourcePortal() ? portalSourceName() : (data.source || serviceSource(serviceId) || ""),
     serviceId,
   };
@@ -1435,6 +1733,7 @@ function openSourceForm(name = "") {
   if (name) {
     sourceForm.elements.oldName.value = name;
     sourceForm.elements.name.value = name;
+    if (sourceForm.elements.phone) sourceForm.elements.phone.value = sourcePhone(name);
     sourceDialog.querySelector("[data-action='delete-source']").dataset.sourceName = name;
     sourceDialog.querySelector("[data-action='delete-source']").style.visibility = "visible";
     document.querySelector("#sourceDialogTitle").textContent = "Kaynak Düzenle";
@@ -1446,8 +1745,14 @@ function saveSource(formData) {
   const data = Object.fromEntries(formData);
   const name = data.name.trim();
   if (!name) return;
-  if (data.oldName) updateSettingItem("sources", data.oldName, name);
-  else addSettingValue("sources", name);
+  if (!state.settings.sourcePhones) state.settings.sourcePhones = {};
+  if (data.oldName) {
+    updateSettingItem("sources", data.oldName, name);
+    if (data.oldName !== name) delete state.settings.sourcePhones[data.oldName];
+  } else addSettingValue("sources", name);
+  const phone = (data.phone || "").trim();
+  if (phone) state.settings.sourcePhones[name] = phone;
+  else delete state.settings.sourcePhones[name];
   saveState();
   sourceDialog.close();
   render();
@@ -1457,6 +1762,7 @@ function deleteSource(name) {
   const sourceName = name || sourceForm.elements.oldName.value;
   if (!sourceName || !confirm(`${sourceName} silinsin mi?`)) return;
   removeSettingValue("sources", sourceName);
+  if (state.settings.sourcePhones) delete state.settings.sourcePhones[sourceName];
   saveState();
   if (sourceDialog.open) sourceDialog.close();
   render();
@@ -1659,10 +1965,13 @@ function syncSettlementCash(cashItem) {
       amount: materialCost,
       materialCost: 0,
       commission50: false,
+      commissionRate: 0,
     });
   }
 
-  if (cashItem.commission50 && commissionBase > 0) {
+  const commissionRate = Number(cashItem.commissionRate !== undefined ? cashItem.commissionRate : (cashItem.commission50 ? 50 : 0)) || 0;
+
+  if (commissionRate > 0 && commissionBase > 0) {
     relatedItems.push({
       id: uid(),
       parentCashId: cashItem.id,
@@ -1672,9 +1981,11 @@ function syncSettlementCash(cashItem) {
       date: cashItem.date,
       type: "expense",
       title: "",
-      amount: commissionBase / 2,
+      amount: commissionBase * commissionRate / 100,
       materialCost: 0,
       commission50: false,
+      commissionRate: 0,
+      commissionRate: 0,
     });
   }
 
@@ -1751,8 +2062,22 @@ function serviceSource(serviceId) {
   return service?.source || "";
 }
 
+function sourcePhone(source) {
+  return state.settings?.sourcePhones?.[source] || "";
+}
+
 function cashItemSource(item) {
   return serviceSource(item.serviceId) || item.source || "";
+}
+
+function cashIsPosted(item) {
+  if (!item?.serviceId) return true;
+  const service = state.services.find((serviceItem) => serviceItem.id === item.serviceId);
+  return service ? isStatus(service.status, "İşlem Tamam") : false;
+}
+
+function postedCashItems(items = state.cash) {
+  return items.filter(cashIsPosted);
 }
 
 function isSourcePortal() {
@@ -1808,6 +2133,16 @@ function addYear(iso) {
   return toIsoDate(date);
 }
 
+function formatServiceCardDate(value) {
+  if (!value) return "-";
+  return new Intl.DateTimeFormat("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(value));
+}
+
+function formatServiceCardDay(value) {
+  if (!value) return "-";
+  return new Intl.DateTimeFormat("tr-TR", { weekday: "long" }).format(new Date(value));
+}
+
 function formatDate(value) {
   if (!value) return "-";
   return new Intl.DateTimeFormat("tr-TR", { weekday: "short", day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(value));
@@ -1843,11 +2178,27 @@ function isClosed(status) {
   return ["İşlem Tamam", "Hesap Kapatıldı", "Servis Sonlandırıldı", "Cihaz Teslim Edildi", "Müşteri İptal Etti"].includes(status);
 }
 
+function statusGroup(status) {
+  const value = norm(status);
+  if (value === norm("Yeni Kayıt")) return "new";
+  if (value === norm("İşlem Tamam")) return "complete";
+  if ([
+    "İptal",
+    "Müşteri İptal Etti",
+    "Cihaz Tamir Edilemiyor",
+    "Fiyatta Anlaşılamadı",
+    "Tamir Edilemedi",
+    "Servis Sonlandırıldı",
+  ].some((item) => value === norm(item))) return "danger";
+  return "process";
+}
+
+function serviceCardTheme(status) {
+  return statusGroup(status);
+}
+
 function statusClass(status) {
-  if (status === "İşlem Tamam") return "complete";
-  if (status === "İşlemde" || status === "Yeni Kayıt") return "new";
-  if (status === "Ödeme Bekliyor") return "payment";
-  return "";
+  return statusGroup(status);
 }
 
 function escapeHtml(value) {
@@ -1868,3 +2219,234 @@ function fileToDataUrl(file) {
     reader.readAsDataURL(file);
   });
 }
+
+
+/* V3.3 - Mobile-first teknisyen paneli */
+let mobileTechFilter = "remaining";
+let mobileActiveServiceId = "";
+
+function isMobileTechViewport() {
+  return window.matchMedia && window.matchMedia("(max-width: 768px)").matches;
+}
+
+function mobileStatusBucket(status) {
+  const group = statusGroup(status || "");
+  if (group === "new") return "new";
+  if (group === "complete") return "complete";
+  if (group === "danger") return "danger";
+  return "process";
+}
+
+function mobileFilteredServices() {
+  let services = sortServices(state.services || []);
+  if (mobileTechFilter === "new") services = services.filter((service) => isStatus(service.status, "Yeni Kayıt"));
+  if (mobileTechFilter === "done") services = services.filter((service) => isStatus(service.status, "İşlem Tamam"));
+  if (mobileTechFilter === "remaining") services = services.filter((service) => !isStatus(service.status, "İşlem Tamam") && statusGroup(service.status) !== "danger");
+  return services;
+}
+
+function mobileServiceCounts() {
+  const services = state.services || [];
+  return {
+    remaining: services.filter((service) => !isStatus(service.status, "İşlem Tamam") && statusGroup(service.status) !== "danger").length,
+    new: services.filter((service) => isStatus(service.status, "Yeni Kayıt")).length,
+    done: services.filter((service) => isStatus(service.status, "İşlem Tamam")).length,
+  };
+}
+
+function mobileRenderTechPanel() {
+  const root = document.querySelector("#mobileTechApp");
+  if (!root) return;
+  const owner = state.company?.ownerName || "Doğan Sezai Koçak";
+  const counts = mobileServiceCounts();
+  const currentCount = counts[mobileTechFilter] ?? counts.remaining;
+  const filterLabel = mobileTechFilter === "new" ? "Yeni" : mobileTechFilter === "done" ? "Biten" : "Kalan";
+
+  document.querySelector("#mobileTechName").textContent = owner;
+  const summary = document.querySelector("#mobileTechSummary");
+  if (summary) summary.textContent = `${filterLabel} · ${currentCount} servis`;
+  document.querySelector("#mobileCountRemaining").textContent = counts.remaining;
+  const newCounter = document.querySelector("#mobileCountNew");
+  if (newCounter) newCounter.textContent = counts.new;
+  document.querySelector("#mobileCountDone").textContent = counts.done;
+  const dateEl = document.querySelector("#mobileListDate");
+  if (dateEl) dateEl.textContent = formatServiceCardDate(isoToday);
+  const titleEl = document.querySelector("#mobileListTitle");
+  if (titleEl) titleEl.textContent = mobileTechFilter === "done" ? "Biten Servisler" : "Bugünkü Servisler";
+  document.querySelectorAll("[data-mobile-filter]").forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.mobileFilter === mobileTechFilter);
+  });
+
+  const list = document.querySelector("#mobileServiceList");
+  const services = mobileFilteredServices();
+  list.innerHTML = services.length ? services.map(mobileServiceCard).join("") : `<div class="mobile-empty">Bu bölümde servis yok.</div>`;
+
+  if (mobileActiveServiceId) mobileRenderDetail(mobileActiveServiceId);
+}
+
+function mobileServiceCard(service) {
+  const dateValue = service.availableDate || service.visitDate || service.createdAt?.slice(0, 10) || "";
+  const timeValue = (service.availableTime || service.createdAt?.slice(11, 16) || "").replace("Saat yok", "");
+  const phoneClean = digits(service.phone);
+  const phoneHref = phoneClean ? `tel:${phoneClean}` : "#";
+  const whatsappHref = phoneClean ? `https://wa.me/90${phoneClean.replace(/^0/, "")}` : "#";
+  const mapHref = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(service.address || "")}`;
+  const bucket = mobileStatusBucket(service.status);
+  const deviceTitle = [service.brand, service.device].filter(Boolean).join(" ") || "Cihaz bilgisi yok";
+  return `
+    <article class="mobile-service-card mobile-status-${bucket}" data-mobile-service-id="${escapeAttr(service.id)}">
+      <div class="mobile-card-top" data-mobile-action="open-detail" data-service-id="${escapeAttr(service.id)}">
+        <div class="mobile-date">
+          <b>${escapeHtml(formatServiceCardDate(dateValue))}</b>
+          <span>${escapeHtml(timeValue || formatServiceCardDay(dateValue))}</span>
+        </div>
+        <span class="mobile-status-pill">${escapeHtml(service.status || "Durum yok")}</span>
+      </div>
+      <div data-mobile-action="open-detail" data-service-id="${escapeAttr(service.id)}">
+        <div class="mobile-device">${escapeHtml(deviceTitle)}</div>
+        <div class="mobile-customer">${escapeHtml(service.customerName || "İsimsiz Müşteri")}</div>
+        <div class="mobile-address">${escapeHtml(service.address || "Adres girilmedi")}</div>
+        <div class="mobile-fault">${escapeHtml(service.fault || "Şikayet yazılmadı")}</div>
+      </div>
+      <div class="mobile-card-actions">
+        <a href="${phoneHref}" onclick="event.stopPropagation()">Ara</a>
+        <a href="${whatsappHref}" target="_blank" rel="noopener" onclick="event.stopPropagation()">WhatsApp</a>
+        <a href="${mapHref}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Yol Tarifi</a>
+      </div>
+    </article>
+  `;
+}
+
+function mobileOpenDetail(serviceId) {
+  mobileActiveServiceId = serviceId;
+  mobileRenderDetail(serviceId);
+  document.querySelector("#mobileDetailSheet")?.removeAttribute("hidden");
+}
+
+function mobileCloseDetail() {
+  mobileActiveServiceId = "";
+  document.querySelector("#mobileDetailSheet")?.setAttribute("hidden", "");
+}
+
+function mobileRenderDetail(serviceId) {
+  const service = state.services.find((item) => item.id === serviceId);
+  const body = document.querySelector("#mobileDetailBody");
+  if (!service || !body) return;
+  const phoneClean = digits(service.phone);
+  const phoneHref = phoneClean ? `tel:${phoneClean}` : "#";
+  const whatsappHref = phoneClean ? `https://wa.me/90${phoneClean.replace(/^0/, "")}` : "#";
+  const mapHref = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(service.address || "")}`;
+  const noteText = service.notes?.map((note) => note.text).filter(Boolean).join("\n") || "";
+  body.innerHTML = `
+    <h2 class="mobile-detail-title">${escapeHtml(service.customerName || "Servis Detayı")}</h2>
+    <p class="mobile-detail-meta">${escapeHtml([service.brand, service.device, service.model].filter(Boolean).join(" · "))}</p>
+    <div class="mobile-detail-actions">
+      <a href="${phoneHref}">Ara</a>
+      <a href="${whatsappHref}" target="_blank" rel="noopener">WhatsApp</a>
+      <a href="${mapHref}" target="_blank" rel="noopener">Yol Tarifi</a>
+    </div>
+    <div class="mobile-detail-box"><h3>Adres</h3><p>${escapeHtml(service.address || "Adres girilmedi")}</p></div>
+    <div class="mobile-detail-box"><h3>Şikayet</h3><p>${escapeHtml(service.fault || "Şikayet yazılmadı")}</p></div>
+    <div class="mobile-detail-box">
+      <h3>Servis Durumu</h3>
+      <select class="mobile-detail-status" data-mobile-status-service="${escapeAttr(service.id)}">
+        ${settingsList("statuses").map((status) => `<option value="${escapeAttr(status)}" ${status === service.status ? "selected" : ""}>${escapeHtml(status)}</option>`).join("")}
+      </select>
+    </div>
+    <div class="mobile-detail-box">
+      <h3>Yapılan İşlemler</h3>
+      <textarea class="mobile-done-textarea" data-mobile-work-note="${escapeAttr(service.id)}" placeholder="Yapılan işlemi yaz...">${escapeHtml(noteText)}</textarea>
+    </div>
+    <footer class="mobile-sheet-footer">
+      <button class="mobile-delay-btn" type="button" data-mobile-action="delay-service" data-service-id="${escapeAttr(service.id)}">Ertele</button>
+      <button class="mobile-close-btn" type="button" data-mobile-action="finish-service" data-service-id="${escapeAttr(service.id)}">Fişi Kapat</button>
+    </footer>
+  `;
+}
+
+function mobileSaveWorkNote(serviceId) {
+  const service = state.services.find((item) => item.id === serviceId);
+  const textarea = document.querySelector(`[data-mobile-work-note="${CSS.escape(serviceId)}"]`);
+  if (!service || !textarea) return "";
+  const text = textarea.value.trim();
+  service.notes = Array.isArray(service.notes) ? service.notes : [];
+  if (text) {
+    const existing = service.notes[0];
+    if (existing) {
+      existing.text = text;
+      existing.updatedAt = new Date().toISOString();
+    } else {
+      service.notes.unshift({ id: uid(), text, createdAt: new Date().toISOString(), updatedAt: "" });
+    }
+  }
+  return text;
+}
+
+function mobileFinishService(serviceId) {
+  const service = state.services.find((item) => item.id === serviceId);
+  if (!service) return;
+  const note = mobileSaveWorkNote(serviceId);
+  if (!note) {
+    alert("Fişi kapatmadan önce yapılan işlemi yazmalısın.");
+    return;
+  }
+  service.status = "İşlem Tamam";
+  service.statusHistory = Array.isArray(service.statusHistory) ? service.statusHistory : [];
+  service.statusHistory.push({ id: uid(), date: isoToday, status: "İşlem Tamam", technician: service.technician || "", description: "Mobil panelden fiş kapatıldı", createdAt: new Date().toISOString() });
+  saveState();
+  mobileCloseDetail();
+  render();
+}
+
+function mobileDelayService(serviceId) {
+  const service = state.services.find((item) => item.id === serviceId);
+  if (!service) return;
+  const nextDate = prompt("Yeni servis tarihini yaz (YYYY-AA-GG):", service.availableDate || isoToday);
+  if (!nextDate) return;
+  service.availableDate = nextDate;
+  service.visitDate = nextDate;
+  mobileSaveWorkNote(serviceId);
+  saveState();
+  render();
+  mobileCloseDetail();
+}
+
+(function setupMobileTechPanel(){
+  const previousRender = render;
+  render = function patchedRender() {
+    previousRender();
+    mobileRenderTechPanel();
+  };
+
+  document.addEventListener("click", (event) => {
+    const filterButton = event.target.closest("[data-mobile-filter]");
+    if (filterButton) {
+      mobileTechFilter = filterButton.dataset.mobileFilter || "remaining";
+      mobileRenderTechPanel();
+      return;
+    }
+    const mobileAction = event.target.closest("[data-mobile-action]");
+    if (!mobileAction) return;
+    const action = mobileAction.dataset.mobileAction;
+    const serviceId = mobileAction.dataset.serviceId;
+    if (action === "open-detail" && serviceId) mobileOpenDetail(serviceId);
+    if (action === "close-detail") mobileCloseDetail();
+    if (action === "finish-service" && serviceId) mobileFinishService(serviceId);
+    if (action === "delay-service" && serviceId) mobileDelayService(serviceId);
+  });
+
+  document.addEventListener("change", (event) => {
+    const select = event.target.closest("[data-mobile-status-service]");
+    if (!select) return;
+    const service = state.services.find((item) => item.id === select.dataset.mobileStatusService);
+    if (!service) return;
+    service.status = select.value;
+    service.statusHistory = Array.isArray(service.statusHistory) ? service.statusHistory : [];
+    service.statusHistory.push({ id: uid(), date: isoToday, status: select.value, technician: service.technician || "", description: "Mobil panelden durum değiştirildi", createdAt: new Date().toISOString() });
+    saveState();
+    render();
+  });
+
+  window.addEventListener("resize", () => { if (isMobileTechViewport()) mobileRenderTechPanel(); });
+  setTimeout(mobileRenderTechPanel, 0);
+})();
