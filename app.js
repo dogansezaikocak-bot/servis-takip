@@ -1304,7 +1304,7 @@ function saveService(formData) {
   saveState();
   serviceDialog.close();
   render();
-  switchView("services");
+  if (!isMobileTechViewport()) switchView("services");
 }
 
 function deleteCurrentService() {
@@ -2335,35 +2335,61 @@ function mobileRenderDetail(serviceId) {
   const phoneClean = digits(service.phone);
   const phoneHref = phoneClean ? `tel:${phoneClean}` : "#";
   const whatsappHref = phoneClean ? `https://wa.me/90${phoneClean.replace(/^0/, "")}` : "#";
-  const mapHref = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(service.address || "")}`;
+  const addressText = [service.city, service.district, service.address].filter(Boolean).join(" ");
+  const mapHref = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addressText || service.address || "")}`;
   const noteText = service.notes?.map((note) => note.text).filter(Boolean).join("\n") || "";
+  const linkedCash = state.cash.filter((item) => item.serviceId === service.id);
+  const incomeTotal = linkedCash.filter((item) => item.type === "income").reduce((total, item) => total + (Number(item.amount) || 0), 0);
+  const expenseTotal = linkedCash.filter((item) => item.type === "expense").reduce((total, item) => total + (Number(item.amount) || 0), 0);
+  const balanceTotal = incomeTotal - expenseTotal;
+  const serviceDate = service.availableDate || service.visitDate || service.createdAt?.slice(0, 10) || isoToday;
+  const serviceTime = service.availableTime || service.createdAt?.slice(11, 16) || "Saat yok";
   body.innerHTML = `
-    <h2 class="mobile-detail-title">${escapeHtml(service.customerName || "Servis Detayı")}</h2>
-    <p class="mobile-detail-meta">${escapeHtml([service.brand, service.device, service.model].filter(Boolean).join(" · "))}</p>
-    <div class="mobile-detail-actions">
-      <a href="${phoneHref}">Ara</a>
-      <a href="${whatsappHref}" target="_blank" rel="noopener">WhatsApp</a>
-      <a href="${mapHref}" target="_blank" rel="noopener">Yol Tarifi</a>
+    <div class="mobile-detail-head">
+      <span class="mobile-detail-no">Fiş No ${escapeHtml(service.id || "-")}</span>
+      <h2 class="mobile-detail-title">${escapeHtml(service.customerName || "Servis Detayı")}</h2>
+      <p class="mobile-detail-meta">${escapeHtml([service.brand, service.device, service.model].filter(Boolean).join(" · ") || "Cihaz bilgisi yok")}</p>
     </div>
-    <div class="mobile-detail-box"><h3>Adres</h3><p>${escapeHtml(service.address || "Adres girilmedi")}</p></div>
-    <div class="mobile-detail-box"><h3>Şikayet</h3><p>${escapeHtml(service.fault || "Şikayet yazılmadı")}</p></div>
+
+    <div class="mobile-detail-actions mobile-detail-actions-six">
+      <a href="${phoneHref}">📞<b>Ara</b></a>
+      <a href="${whatsappHref}" target="_blank" rel="noopener">💬<b>WhatsApp</b></a>
+      <a href="${mapHref}" target="_blank" rel="noopener">🗺️<b>Harita</b></a>
+      <button type="button" data-mobile-action="add-note" data-service-id="${escapeAttr(service.id)}">📝<b>Not</b></button>
+      <button type="button" data-mobile-action="add-photo" data-service-id="${escapeAttr(service.id)}">📷<b>Fotoğraf</b></button>
+      <button type="button" data-mobile-action="edit-service" data-service-id="${escapeAttr(service.id)}">✎<b>Düzenle</b></button>
+    </div>
+
+    <div class="mobile-detail-info-grid">
+      <div class="mobile-detail-box"><h3>Telefon</h3><p>${escapeHtml(service.phone || "Telefon yok")}</p></div>
+      <div class="mobile-detail-box"><h3>Tarih / Saat</h3><p>${escapeHtml(formatDate(serviceDate))} · ${escapeHtml(serviceTime)}</p></div>
+      <div class="mobile-detail-box"><h3>Kaynak</h3><p>${escapeHtml(service.source || "Kendi İşim")}</p></div>
+      <div class="mobile-detail-box"><h3>Ücret</h3><p>${escapeHtml(money(balanceTotal || service.price || 0))}</p></div>
+    </div>
+
+    <div class="mobile-detail-box"><h3>Adres</h3><p>${escapeHtml(addressText || "Adres girilmedi")}</p></div>
+    <div class="mobile-detail-box mobile-fault-box"><h3>Şikayet</h3><p>${escapeHtml(service.fault || "Şikayet yazılmadı")}</p></div>
+
     <div class="mobile-detail-box">
       <h3>Servis Durumu</h3>
       <select class="mobile-detail-status" data-mobile-status-service="${escapeAttr(service.id)}">
         ${settingsList("statuses").map((status) => `<option value="${escapeAttr(status)}" ${status === service.status ? "selected" : ""}>${escapeHtml(status)}</option>`).join("")}
       </select>
     </div>
+
     <div class="mobile-detail-box">
-      <h3>Yapılan İşlemler</h3>
+      <h3>Yapılan İşlemler / Not</h3>
       <textarea class="mobile-done-textarea" data-mobile-work-note="${escapeAttr(service.id)}" placeholder="Yapılan işlemi yaz...">${escapeHtml(noteText)}</textarea>
     </div>
+
+    ${service.photos?.length ? `<div class="mobile-photo-strip">${service.photos.slice(0, 4).map((photo) => `<img src="${escapeAttr(photo.dataUrl)}" alt="Servis fotoğrafı">`).join("")}</div>` : ""}
+
     <footer class="mobile-sheet-footer">
       <button class="mobile-delay-btn" type="button" data-mobile-action="delay-service" data-service-id="${escapeAttr(service.id)}">Ertele</button>
       <button class="mobile-close-btn" type="button" data-mobile-action="finish-service" data-service-id="${escapeAttr(service.id)}">Fişi Kapat</button>
     </footer>
   `;
 }
-
 function mobileSaveWorkNote(serviceId) {
   const service = state.services.find((item) => item.id === serviceId);
   const textarea = document.querySelector(`[data-mobile-work-note="${CSS.escape(serviceId)}"]`);
@@ -2433,6 +2459,12 @@ function mobileDelayService(serviceId) {
     if (action === "close-detail") mobileCloseDetail();
     if (action === "finish-service" && serviceId) mobileFinishService(serviceId);
     if (action === "delay-service" && serviceId) mobileDelayService(serviceId);
+    if (action === "add-note" && serviceId) { mobileSaveWorkNote(serviceId); openNoteForm(serviceId); }
+    if (action === "add-photo" && serviceId) { mobileSaveWorkNote(serviceId); openPhotoForm(serviceId); }
+    if (action === "edit-service" && serviceId) {
+      const service = state.services.find((item) => item.id === serviceId);
+      if (service) { mobileSaveWorkNote(serviceId); openServiceForm(service); }
+    }
   });
 
   document.addEventListener("change", (event) => {
