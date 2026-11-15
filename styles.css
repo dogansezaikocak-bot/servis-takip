@@ -4839,3 +4839,11 @@ body { background: var(--ekzen-page) !important; color: var(--ekzen-text) !impor
     border: 1px solid #e2e8f0 !important;
   }
 }
+
+/* User-configurable counters */
+.custom-counter-editor { display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;padding:14px 0;align-items:end; }
+.custom-counter-editor label { display:flex;flex-direction:column;gap:6px;font-size:13px; }
+.custom-counter-editor input,.custom-counter-editor select { width:100%;min-height:40px;padding:8px;border:1px solid #cbd5e1;border-radius:8px;background:var(--surface,#fff);color:inherit; }
+#customDashboardCounters:empty,#mobileCustomCounters:empty {display:none;}
+.mobile-custom-counters {padding:8px 12px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
+.mobile-custom-counters .stat-box {min-width:0;padding:12px;}
