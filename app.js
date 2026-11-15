@@ -141,6 +141,7 @@ function migrateState(oldState) {
       dashboardCounters: dashboardCountersVersion < 3 ? ensureValues(currentCounters, ["Açık Fişler", "Toplam Servis"]) : currentCounters,
       dashboardCountersVersion: 3,
       cashCounters: normalizeCashCounters(oldState.settings?.cashCounters),
+      customCounters: Array.isArray(oldState.settings?.customCounters) ? oldState.settings.customCounters : [],
       sources: ensureValues(sourceNames.length ? sourceNames : [...sources], ["Korkmaz Teknik", "Sedef Teknik", "Kendi İşim"]),
       cities: uniqueValues(oldState.settings?.cities || cities),
       sourcePhones: { ...(oldState.settings?.sourcePhones || {}) },
@@ -385,6 +386,10 @@ function bindEvents() {
       "delete-service", "add-cash", "edit-cash", "delete-cash", "change-status", "add-note", "edit-note", "delete-note", "add-photo", "edit-photo", "delete-photo",
     ].includes(action)) return;
 
+    if (action === "custom-counter-save") saveCustomCounter();
+    if (action === "custom-counter-edit") editCustomCounter(button.dataset.id);
+    if (action === "custom-counter-delete") deleteCustomCounter(button.dataset.id);
+    if (action === "custom-counter-list") openCustomCounterList(button.dataset.id);
     if (action === "toggle-nav") document.body.classList.toggle("nav-open");
     if (action === "open-service-modal") openServiceForm();
     if (action === "open-service-detail") openDetail(button.dataset.serviceId);
@@ -632,6 +637,7 @@ function renderDashboard() {
   document.querySelector("#dashboardOwnerLine").hidden = isSourcePortal();
   renderSourceMetrics(services, cashItems, cashBalanceItems);
   renderDashboardCounters(services);
+  renderCustomCounters(services);
 
   const plans = [...services]
     .filter((service) => isActiveDashboardDateStatus(service.status))
@@ -1199,6 +1205,7 @@ function renderSettings() {
     if (form.elements[key]) form.elements[key].value = value || "";
   });
   renderSettingsLists();
+  renderCustomCounterSettings();
 }
 
 function renderSettingsLists() {
@@ -2482,3 +2489,86 @@ function mobileDelayService(serviceId) {
   window.addEventListener("resize", () => { if (isMobileTechViewport()) mobileRenderTechPanel(); });
   setTimeout(mobileRenderTechPanel, 0);
 })();
+
+function customCounters() {
+  return state.settings.customCounters ||= [];
+}
+function renderCustomCounters(services) {
+  let root = document.querySelector("#customDashboardCounters");
+  if (!root) {
+    root = document.createElement("div");
+    root.id = "customDashboardCounters";
+    root.className = "stat-row";
+    document.querySelector("#dashboardCounters").after(root);
+  }
+  const mobile = document.querySelector("#mobileCustomCounters");
+  const items = customCounters();
+  const renderCards = (where) => items.filter(c => c.location === "both" || c.location === where).map(c => {
+    const matched = customCounterServices(c, services);
+    const value = c.calculation === "sum" ? money(matched.reduce((a, v) => a + (Number(v.price) || 0), 0)) : matched.length;
+    return `<article class="stat-box ${c.behavior === "none" ? "" : "is-clickable"}" ${c.behavior === "none" ? "" : `data-action="custom-counter-list" data-id="${escapeAttr(c.id)}"`}>
+      <span>${escapeHtml(c.name)}</span><b>${value}</b></article>`;
+  }).join("");
+  root.innerHTML = renderCards("desktop");
+  if (mobile) mobile.innerHTML = renderCards("mobile");
+}
+function customCounterServices(c, services) {
+  return c.calculation === "status" ? services.filter(s => s.status === c.status) : services;
+}
+function renderCustomCounterSettings() {
+  let root = document.querySelector("#customCounterSettings");
+  if (!root) {
+    root = document.createElement("section");
+    root.id = "customCounterSettings";
+    root.className = "settings-list";
+    document.querySelector("#settingsLists").before(root);
+  }
+  const options = (values, selected) => values.map(([v, label]) => `<option value="${escapeAttr(v)}" ${v === selected ? "selected" : ""}>${escapeHtml(label)}</option>`).join("");
+  root.innerHTML = `<header><h3>Özelleştirilebilir Sayaçlar</h3></header>
+  <div class="custom-counter-editor">
+    <input id="customCounterId" type="hidden">
+    <label>Sayaç Adı<input id="customCounterName" placeholder="Atölyedeki Cihazlar"></label>
+    <label>Konum<select id="customCounterLocation">${options([["both","Masaüstü ve Mobil"],["desktop","Masaüstü"],["mobile","Mobil"]],"both")}</select></label>
+    <label>Hesaplama<select id="customCounterCalculation">${options([["status","Servis Durumu"],["count","Fiş Sayısı"],["sum","Servis Tutarı Toplamı"]],"status")}</select></label>
+    <label>Servis Durumu<select id="customCounterStatus">${options((state.settings.statuses || []).map(v => [v,v]),"Atölyede")}</select></label>
+    <label>Tıklama<select id="customCounterBehavior">${options([["list","Servis Listesi"],["detail","Detay Listesi"],["none","Tıklanmasın"]],"list")}</select></label>
+    <button type="button" class="primary-button" data-action="custom-counter-save">Sayacı Kaydet</button>
+  </div>
+  <div>${customCounters().map(c => `<div class="setting-chip"><span>${escapeHtml(c.name)} · ${escapeHtml(c.location)} · ${escapeHtml(c.calculation)}</span><div class="row-actions">
+    <button type="button" class="mini-button" data-action="custom-counter-edit" data-id="${escapeAttr(c.id)}">✎</button>
+    <button type="button" class="mini-button danger" data-action="custom-counter-delete" data-id="${escapeAttr(c.id)}">×</button></div></div>`).join("")}</div>`;
+}
+function saveCustomCounter() {
+  const get = id => document.getElementById(id).value.trim();
+  const name = get("customCounterName");
+  if (!name) return alert("Sayaç adını giriniz.");
+  const id = get("customCounterId") || uid();
+  const item = {id, name, location:get("customCounterLocation"), calculation:get("customCounterCalculation"), status:get("customCounterStatus"), behavior:get("customCounterBehavior")};
+  const index = customCounters().findIndex(c => c.id === id);
+  if (index < 0) customCounters().push(item); else customCounters()[index] = item;
+  saveState(); render(); alert("Sayaç kaydedildi.");
+}
+function editCustomCounter(id) {
+  const c = customCounters().find(x => x.id === id);
+  if (!c) return;
+  for (const [key,value] of Object.entries({Id:c.id,Name:c.name,Location:c.location,Calculation:c.calculation,Status:c.status,Behavior:c.behavior})) {
+    const field = document.getElementById("customCounter"+key);
+    if (field) field.value = value;
+  }
+  document.getElementById("customCounterName").focus();
+}
+function deleteCustomCounter(id) {
+  if (!confirm("Bu sayacı silmek istiyor musunuz?")) return;
+  state.settings.customCounters = customCounters().filter(c => c.id !== id);
+  saveState(); render();
+}
+function openCustomCounterList(id) {
+  const c = customCounters().find(x => x.id === id);
+  if (!c || c.behavior === "none") return;
+  activeDashboardStat = "";
+  activeDashboardSource = "";
+  filterForm.reset();
+  switchView("services");
+  topStatusFilter.value = c.calculation === "status" ? c.status : "";
+  renderServices();
+}
