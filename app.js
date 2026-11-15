@@ -383,9 +383,10 @@ function bindEvents() {
     if (!action) return;
     if (isSourcePortal() && [
       "add-source", "edit-source", "delete-source", "add-setting-item", "edit-setting-item", "delete-setting-item", "move-setting-item", "export-backup", "choose-backup",
-      "delete-service", "add-cash", "edit-cash", "delete-cash", "change-status", "add-note", "edit-note", "delete-note", "add-photo", "edit-photo", "delete-photo",
+      "factory-reset-settings", "delete-service", "add-cash", "edit-cash", "delete-cash", "change-status", "add-note", "edit-note", "delete-note", "add-photo", "edit-photo", "delete-photo",
     ].includes(action)) return;
 
+    if (action === "factory-reset-settings") requestFactoryReset();
     if (action === "custom-counter-save") saveCustomCounter();
     if (action === "custom-counter-edit") editCustomCounter(button.dataset.id);
     if (action === "custom-counter-delete") deleteCustomCounter(button.dataset.id);
@@ -1206,6 +1207,7 @@ function renderSettings() {
   });
   renderSettingsLists();
   renderCustomCounterSettings();
+  renderFactoryResetSettings();
 }
 
 function renderSettingsLists() {
@@ -2571,4 +2573,71 @@ function openCustomCounterList(id) {
   switchView("services");
   topStatusFilter.value = c.calculation === "status" ? c.status : "";
   renderServices();
+}
+
+/* Factory reset affects configuration only. Never erase operational records. */
+function renderFactoryResetSettings() {
+  let section = document.querySelector("#factoryResetSettings");
+  if (!section) {
+    section = document.createElement("section");
+    section.id = "factoryResetSettings";
+    section.className = "settings-list";
+    document.querySelector("#settingsLists").after(section);
+  }
+  section.innerHTML = `<header><h3>Fabrika Ayarlarına Dön</h3></header>
+    <p>Yalnızca özelleştirmeleri sıfırlar. Servisler, müşteriler, kasa hareketleri, kaynak bakiyeleri ve firma bilgileri korunur.</p>
+    <p>Önce tam JSON yedeği indirilir. Devam etmek için ayrıca onay vermeniz gerekir.</p>
+    <button class="danger-button" type="button" data-action="factory-reset-settings">Özelleştirmeleri Sıfırla</button>`;
+}
+function requestFactoryReset() {
+  if (isSourcePortal()) return;
+  if (!cloudReady || !cloudRef) {
+    alert("Bulut bağlantısı hazır değil. Veri güvenliği için sıfırlama yapılamaz.");
+    return;
+  }
+  const current = JSON.parse(JSON.stringify(state));
+  const backup = JSON.stringify({app:"ekzen-servis-takip",version:1,exportedAt:new Date().toISOString(),reason:"before-factory-reset",state:current},null,2);
+  const blob = new Blob([backup],{type:"application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `ekzen-fabrika-oncesi-${new Date().toISOString().replace(/[:.]/g,"-")}.json`;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  const confirmation = prompt("Yedek dosyanızın indirildiğini kontrol edin. Servis ve kasa verileri silinmeyecek. Devam etmek için AYARLARI SIFIRLA yazın:");
+  if (confirmation !== "AYARLARI SIFIRLA") return;
+  const next = JSON.parse(JSON.stringify(current));
+  const original = current.settings || {};
+  next.settings = cloneSettings(defaultSettings);
+  next.settings.dashboardCountersVersion = 3;
+  next.settings.cashCounters = normalizeCashCounters(null);
+  next.settings.customCounters = [];
+  // Keep referenced categories and contact metadata: they are part of existing records.
+  next.settings.statuses = ensureValues(next.settings.statuses, [
+    ...((original.statuses || []).filter(v => current.services.some(s => s.status === v)))
+  ]);
+  next.settings.sources = ensureValues(next.settings.sources, [
+    ...((original.sources || []).filter(v => current.services.some(s => s.source === v) || current.cash.some(c => c.source === v)))
+  ]);
+  next.settings.sourcePhones = { ...(original.sourcePhones || {}) };
+  // Preserve future unknown settings unless explicitly registered as customizable.
+  const customizable = new Set(["brands","devices","statuses","sources","cities","dashboardCounters","dashboardCountersVersion","cashCounters","customCounters"]);
+  Object.entries(original).forEach(([key,value]) => {
+    if (!customizable.has(key) && key !== "sourcePhones") next.settings[key] = value;
+  });
+  // Confirm no operational record changed before committing.
+  if (JSON.stringify(next.services) !== JSON.stringify(current.services) ||
+      JSON.stringify(next.cash) !== JSON.stringify(current.cash) ||
+      JSON.stringify(next.company) !== JSON.stringify(current.company)) {
+    alert("Güvenlik kontrolü başarısız. Hiçbir değişiklik yapılmadı.");
+    return;
+  }
+  cloudRef.set({updatedAt:new Date().toISOString(),state:next}).then(() => {
+    state = migrateState(next);
+    saveLocalState();
+    render();
+    alert("Özelleştirmeler fabrika ayarlarına döndü. İşletme kayıtları korundu.");
+  }).catch(() => alert("Buluta kaydedilemedi. Hiçbir ayar sıfırlanmadı."));
 }
